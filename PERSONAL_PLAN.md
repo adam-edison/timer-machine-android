@@ -155,6 +155,133 @@ alternatives).
 
 **Manual test:** _(fill in after building)_
 
+## 6. Search timers by name
+
+Branch: `feat/timer-search`
+
+**What:** a search field in the timer list toolbar, live-filtering by name.
+**Global** — searches every timer in every folder regardless of which folder
+you're currently viewing, not just the current folder's contents.
+
+**Touches:** new DAO query (`SELECT id, name, folderId FROM TimerItem WHERE name
+LIKE '%' || :query || '%'`, folder-independent) · repository/use-case wrapper ·
+`TimerViewModel` (search query state, switches the list source between
+per-folder browsing and the global search results while a query is active) ·
+toolbar `SearchView` in `TimerFragment`.
+
+**Effort:** 0.5–1 day.
+
+**Status:** not started
+
+**Manual test:** _(fill in after building)_
+
+## 7. Import a timer from a JSON file (including Google Drive)
+
+Branch: `feat/timer-json-import`
+
+**What:** pick a `.json` file — Google Drive included, since it's just a
+standard Android file picker — parse it as a timer, then choose which folder
+to save it into as a new timer.
+
+**Already exists and gets reused as-is:** the editor's "Copy to clipboard" /
+"Create from clipboard" actions (`EditActivity.kt:230-246`) already export and
+import a single timer as real Moshi JSON (`AppDataRepositoryImpl.kt:22-39`),
+via `ShareTimer.shareAsString` / `receiveFromString`. This is genuinely most of
+the feature already built — what's missing is a file source and a folder
+destination instead of clipboard-only import into the currently-open editor.
+
+**What's new:** `ActivityResultContracts.OpenDocument()` file picker (Drive
+shows up automatically as a document provider, no separate Drive API
+integration) → read the file's text → `ShareTimer.receiveFromString(...)` →
+folder picker (reuse the folder-selection piece already built for
+`TimerPicker.kt`) → `AddTimer` with the chosen `folderId`, as a new entry point
+from the timer list rather than from inside the editor.
+
+**Also do:** once this exists, export one real timer and save the resulting
+JSON into this plan file as a documented example — that's what makes it easy
+to point an AI at later ("generate JSON matching this shape").
+
+**Effort:** 0.5–1 day — small, because the export/import round trip already
+works.
+
+**Status:** not started
+
+**Manual test:** _(fill in after building)_
+
+## 8. Composable timers — run a saved timer as a step, N times
+
+Branch: `feat/composable-timer-step`
+
+**What:** a new step type that says "run saved timer X, N times" as one step
+among others in a timer — not the existing `Group` loop (which only loops
+steps physically copy-pasted into that one timer), and not the existing
+"trigger next timer" pointer (`TimerMoreEntity.triggerTimerId`, which starts
+the other timer as a brand-new separate run only once this one fully ends —
+checked in `MachinePresenter.kt:606-611`, confirmed it's a hand-off, not an
+inline splice). This is a genuine reference: edit "Pushups" once, and every
+timer that runs it N times picks up the change next run.
+
+**Design:** a new `StepEntity.TimerReference(timerId: Int, loop: Int)` sealed
+subtype, resolved at the point a timer is loaded to run (and when computing
+duration) by loading the referenced `TimerEntity` and expanding its steps
+inline as if it were a `Group` with that loop count — so all the existing
+loop/skip/duration/index machinery (including item 1's duration display and
+items 3/4's conditions) keeps working unchanged. The editor shows it as a
+collapsed reference chip, picked via the `TimerPicker` dialog that already
+exists and is already used for `triggerTimerId` selection
+(`EditActivityMoreDialog.kt:69`) — no new picker UI to build.
+
+**Cycle detection:** reject saving a reference that would let a timer
+(transitively) reference itself.
+
+**Deleting or renaming a referenced timer:** renaming/editing is always
+allowed and takes effect everywhere it's referenced, next run. Deleting a
+timer that's referenced elsewhere shows a dialog with two choices —
+"Delete and remove it from every timer that references it" (double-confirmed)
+or "Cancel" — never a silent cascade, never a silent block.
+
+**Touches:** `StepEntity.kt` (new sealed subtype) · step JSON adapter / DB
+converters (new serialization case) · `TimerMachineHelper.kt` (reference
+resolution before existing navigation/duration/skip logic runs) · editor step
+list UI (new step type, reusing `TimerPicker`) · `DeleteTimer` use case (new
+"which timers reference this one" query + the two-choice dialog).
+
+**Effort:** 3–5 days — heaviest of this batch, last on purpose.
+
+**Status:** not started
+
+**Manual test:** _(fill in after building)_
+
+## 9. Local music playlist — searchable, persists across steps, layers with alerts
+
+Branch: `feat/timer-soundtrack`
+
+**What:** a "Soundtrack" attached to the whole timer, not any one step — plays
+a playlist you build once (shuffled or in order), looping for as long as the
+timer runs, continuing across every step boundary until the timer ends,
+instead of stopping when the step that started it advances. Layers with
+BEEP/VOICE by manually ducking the soundtrack's own volume while an alert
+plays, rather than fighting over exclusive OS audio focus — this is all your
+own app's audio, so there's no need for the cross-app ducking dance.
+
+**Playlist builder — corrected from the original spec:** a single search
+textbox, live-filtered against Android's `MediaStore.Audio.Media` (title,
+artist, filename columns), not a folder or file picker. Requires
+`READ_MEDIA_AUDIO` (Android 13+) / `READ_EXTERNAL_STORAGE` on older versions.
+Reuses the same search-box pattern as item 6, applied to a different list.
+
+**Touches:** new runtime permission · `MediaStore` query + search UI · new
+playlist entity/DB table · a player component with its own lifecycle
+independent of step advancement · manual-duck logic layered onto the existing
+audio-focus/beep/TTS path.
+
+**Effort:** 3–5 days, real on-device audio testing required (OEM quirks are
+common here) — the biggest single item in this batch.
+
+**Status:** not started
+
+**Manual test:** _(fill in after building)_
+
 ---
 
 ## Build & install (Mac → Android, USB)
