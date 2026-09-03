@@ -435,16 +435,33 @@ once the plumbing exists, not a blocker.
   HTTP call just fails and WorkManager's existing retry-with-backoff
   (`Result.retry()` in `TtsBakeryWorker.kt:64`) picks it up next time
   something connects — no new retry logic needed.
+- **Baking itself needs a fallback chain, not just a live-speak fallback.**
+  `TtsBakeryWorker.synthesize()`: try the self-hosted Kokoro call first; if
+  it's unreachable (Mac off, off home WiFi), bake via the on-device engine
+  instead — still proactively, still producing a cached file at save time,
+  never leaving a phrase to be synthesized live at alarm time. The on-device
+  fallback can't reproduce a specific Kokoro voice (Nicole/Bella don't exist
+  on-device) — it uses the phone's own default voice/engine, so this trades
+  voice identity for reliability, not a bug.
+- **Fallback-baked entries need to self-upgrade.** Tag any cache entry baked
+  via the on-device fallback (e.g. a `source` field alongside the cached
+  file: `kokoro` vs `on-device`). Whenever that timer is next saved/edited —
+  and/or on a periodic sweep — re-attempt Kokoro for any `on-device`-tagged
+  entries and replace them in place if it succeeds. Without this, a timer
+  silently stays on the lesser voice forever after one save with the Mac
+  off, with no obvious sign anything's wrong.
 - **Already-existing safety net, no work needed:** if a phrase is ever
-  actually spoken before it's been baked (edge case — new content encountered
-  mid-run), `TtsSpeaker.kt` already falls back to the on-device engine live
-  rather than staying silent. Worse quality in that one case, never silence.
+  actually spoken before it's been baked at all (edge case — brand new
+  content encountered mid-run), `TtsSpeaker.kt` already falls back to the
+  on-device engine live rather than staying silent. This is the genuinely
+  last-resort case; the two bullets above mean it should rarely trigger.
 
-**Effort:** 3–5 days for the app-side change — bumped up from the original
+**Effort:** 4–6 days for the app-side change — bumped up from the original
 single-global-voice estimate, since per-timer voice touches the cache key,
-the run engine, and a new picker UI, not just the bake step. Separately, get
-comfortable running the Docker container and picking voices you like before
-writing any code — that part is pure listening, not engineering.
+the run engine, and a new picker UI, and the fallback chain needs a
+self-upgrade path, not just a one-shot bake step. Separately, get comfortable
+running the Docker container and picking voices you like before writing any
+code — that part is pure listening, not engineering.
 
 **Status:** not started
 
