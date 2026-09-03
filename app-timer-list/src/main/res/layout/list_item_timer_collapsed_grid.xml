@@ -42,6 +42,21 @@
                 app:autoSizeTextType="uniform"
                 tools:text="@tools:sample/lorem/random" />
 
+            <TextView
+                android:id="@+id/textTimerDuration"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:layout_marginEnd="8dp"
+                android:layout_marginBottom="4dp"
+                android:ellipsize="end"
+                android:gravity="center"
+                android:maxLines="1"
+                android:textAppearance="?textAppearanceCaption"
+                android:textColor="@color/timer_duration_text"
+                android:textSize="18sp"
+                tools:text="12:34:56" />
+
             <com.google.android.material.floatingactionbutton.FloatingActionButton
                 android:id="@+id/imageTimerStartPause"
                 android:layout_width="wrap_content"

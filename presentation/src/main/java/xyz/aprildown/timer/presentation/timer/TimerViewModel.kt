@@ -14,6 +14,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import xyz.aprildown.timer.domain.di.MainDispatcher
 import xyz.aprildown.timer.domain.entities.FolderEntity
@@ -34,16 +35,19 @@ import xyz.aprildown.timer.domain.usecases.timer.ChangeTimerFolder
 import xyz.aprildown.timer.domain.usecases.timer.DeleteTimer
 import xyz.aprildown.timer.domain.usecases.timer.GetTimer
 import xyz.aprildown.timer.domain.usecases.timer.GetTimerInfoFlow
+import xyz.aprildown.timer.domain.usecases.timer.GetTimersFlow
 import xyz.aprildown.timer.domain.usecases.timer.ShareTimer
 import xyz.aprildown.timer.presentation.BaseViewModel
 import xyz.aprildown.timer.presentation.StreamMachineIntentProvider
 import xyz.aprildown.timer.presentation.stream.StreamState
+import xyz.aprildown.timer.presentation.stream.getTotalTime
 import javax.inject.Inject
 
 @HiltViewModel
 class TimerViewModel @Inject constructor(
     @MainDispatcher mainDispatcher: CoroutineDispatcher,
     private val getTimerInfoFlow: GetTimerInfoFlow,
+    private val getTimersFlow: GetTimersFlow,
     private val addTimer: AddTimer,
     private val getTimer: GetTimer,
     private val changeTimerFolder: ChangeTimerFolder,
@@ -87,6 +91,20 @@ class TimerViewModel @Inject constructor(
         }.asLiveData().switchMap { (folderId, sortBy) ->
             getTimerInfoFlow.get(folderId, sortBy).asLiveData()
         }
+
+    private val timerDurations: LiveData<Map<Int, Long>> =
+        currentFolderId.switchMap { folderId ->
+            getTimersFlow.get(folderId).map { timers ->
+                timers.associate { timer -> timer.id to timer.getTotalTime() }
+            }.asLiveData()
+        }
+
+    val timerList: LiveData<List<TimerListEntry>> =
+        timerInfo.asFlow().combine(timerDurations.asFlow()) { infos, durations ->
+            infos.map { info ->
+                TimerListEntry(timerInfo = info, duration = durations[info.id] ?: 0L)
+            }
+        }.asLiveData()
 
     private val _shareStringEvent = MutableLiveData<Event<Fruit<String>>>()
     val shareStringEvent: LiveData<Event<Fruit<String>>> = _shareStringEvent
@@ -236,3 +254,8 @@ class TimerViewModel @Inject constructor(
         }
     }
 }
+
+data class TimerListEntry(
+    val timerInfo: TimerInfo,
+    val duration: Long,
+)
