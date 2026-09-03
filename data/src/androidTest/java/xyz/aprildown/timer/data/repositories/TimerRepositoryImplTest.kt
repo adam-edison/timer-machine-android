@@ -2,6 +2,7 @@ package xyz.aprildown.timer.data.repositories
 
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -83,5 +84,21 @@ class TimerRepositoryImplTest {
         timerRepository.delete(id)
 
         assertNull(timerRepository.item(id))
+    }
+
+    @Test
+    fun getTimersFlow_returnsFullEntitiesForTheFolder() = runTest {
+        val defaultFolderId = TestData.fakeTimerSimpleA.folderId
+        val otherFolderId = defaultFolderId + 1
+
+        val defaultFolderTimerId = timerRepository.add(TestData.fakeTimerSimpleA)
+        timerRepository.add(TestData.fakeTimerAdvanced.copy(folderId = otherFolderId))
+
+        val result = timerRepository.getTimersFlow(defaultFolderId).first()
+
+        assertEquals(
+            listOf(TestData.fakeTimerSimpleA.copy(id = defaultFolderTimerId)),
+            result
+        )
     }
 }

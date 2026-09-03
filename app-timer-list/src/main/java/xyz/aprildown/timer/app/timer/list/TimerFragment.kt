@@ -240,10 +240,11 @@ class TimerFragment :
             )
         ).attachToRecyclerView(binding.listTimers)
 
-        viewModel.timerInfo.observe(viewLifecycleOwner) { timerInfo ->
-            val newList = (timerInfo ?: emptyList()).map {
+        viewModel.timerList.observe(viewLifecycleOwner) { timerList ->
+            val newList = (timerList ?: emptyList()).map {
                 MutableTimerItem(
-                    timerInfo = it,
+                    timerInfo = it.timerInfo,
+                    timerDuration = it.duration,
                     timerItem = null,
                     state = StreamState.RESET,
                     isExpanded = false

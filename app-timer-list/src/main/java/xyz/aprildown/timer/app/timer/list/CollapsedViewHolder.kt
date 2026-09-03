@@ -5,6 +5,7 @@ import android.widget.ImageButton
 import android.widget.TextView
 import androidx.core.view.isVisible
 import androidx.recyclerview.widget.RecyclerView
+import xyz.aprildown.timer.app.base.utils.produceTime
 import xyz.aprildown.timer.domain.entities.FolderEntity
 import xyz.aprildown.timer.app.base.R as RBase
 
@@ -14,6 +15,7 @@ internal class CollapsedViewHolder(
 ) : RecyclerView.ViewHolder(view) {
 
     private val name = view.findViewById<TextView>(R.id.textTimerName)
+    private val duration = view.findViewById<TextView>(R.id.textTimerDuration)
     private val start = view.findViewById<ImageButton>(R.id.imageTimerStartPause)
 
     init {
@@ -34,6 +36,7 @@ internal class CollapsedViewHolder(
 
     fun bind(item: MutableTimerItem) {
         name.text = item.timerName
+        duration.text = item.timerDuration.produceTime()
         start.isVisible = item.timerInfo.folderId != FolderEntity.FOLDER_TRASH
     }
 

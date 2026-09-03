@@ -6,6 +6,7 @@ import xyz.aprildown.timer.presentation.stream.StreamState
 
 internal data class MutableTimerItem(
     val timerInfo: TimerInfo,
+    val timerDuration: Long,
     var timerItem: TimerEntity?,
     var state: StreamState,
     var isExpanded: Boolean
