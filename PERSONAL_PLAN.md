@@ -32,8 +32,12 @@ alongside the existing `dog` / `google` / `other` flavors already defined in
   suffix (e.g. `.personal`) so it installs side-by-side with the Play Store version
   without a signature/package clash.
 - Flavor-specific resource overrides in a new `app/src/personal/res/` source set:
-  - `values/strings.xml` → override `app_name`.
+  - `values/strings.xml` → override `app_name`. Placeholder: `Timer Machine (Mine)`,
+    swap for a real name anytime by editing this one file.
   - `mipmap-*/ic_launcher*` (and adaptive icon layers) → a distinct launcher icon.
+    Placeholder: the existing launcher icon with a tint/badge applied, just enough
+    to be visually distinct at a glance — swap for a real icon anytime by
+    replacing the files in this flavor's `res/` folder.
 - No changes to any shared file — everything lives in the new flavor's own source
   set, so this can never conflict with an upstream merge.
 
