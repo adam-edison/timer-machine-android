@@ -7,7 +7,7 @@ use only (see licensing note at the bottom).
 ## Status
 
 - [x] [0. Personal branding](#0-personal-branding-do-first)
-- [ ] [1. Total timer duration shown in the list](#1-total-timer-duration-shown-in-the-list)
+- [x] [1. Total timer duration shown in the list](#1-total-timer-duration-shown-in-the-list)
 - [ ] [2. Nagging reminder interval on HALT](#2-nagging-reminder-interval-on-halt)
 - [ ] [3. Day-of-week condition](#3-day-of-week-condition-on-a-step-or-group)
 - [ ] [4. Time-of-day range condition](#4-time-of-day-range-condition)
@@ -119,11 +119,23 @@ noticeably worse after this lands.
 `list_item_timer_collapsed_grid.xml` (new duration TextView, reusing the existing
 `Long.produceTime()` formatter from `app-base/.../TimeConverter.kt:29`).
 
+**Styling:** duration text is 18sp (up from the initial caption size) in a
+pale blue that's tuned per theme for legibility — `app-timer-list/src/main/
+res/values/colors.xml` (`#4A78B5`, light mode) and `values-night/colors.xml`
+(`#90CAF9`, Material Blue 200, dark mode), following the existing per-module
+`values`/`values-night` color pattern already used elsewhere in the codebase
+(e.g. `app-timer-edit`'s `step_info_background`).
+
 **Effort:** half a day to a day.
 
-**Status:** not started
+**Status:** done
 
-**Manual test:** _(fill in after building)_
+**Manual test:** Built `feat/timer-duration-display` off `develop`, installed
+`installDogDebug` over USB (launched directly via `adb shell am start` to
+avoid the dog/google flavors sharing an identical name and icon). Confirmed
+on-device: every timer in both list and grid view shows its total duration
+under its name, styled larger and pale blue, legible in both light and dark
+theme. Merged into `personal` via `git merge --no-ff feat/timer-duration-display`.
 
 ## 2. Nagging reminder interval on HALT
 
