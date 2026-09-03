@@ -355,7 +355,7 @@ worth confirming once on your device regardless of what we build here.
 
 **Manual test:** _(fill in after building)_
 
-## 11. Self-hosted high-quality TTS voice
+## 11. Self-hosted high-quality TTS voice, chosen per timer
 
 Branch: `feat/tts-self-hosted-voice`
 
@@ -365,6 +365,21 @@ cloud account, no API key, no ongoing cost, ever — chosen over a cloud
 provider (Azure/Google both have generous free tiers, researched and
 documented below for reference if this ever changes) specifically to avoid
 depending on an external account and to keep everything on your own network.
+
+**Voice is per-timer, not a single app-wide setting.** Different timers want
+different voices — Nicole for meditation, Bella as the default "normal"
+voice. Each timer gets its own voice choice, picked from a preview list.
+
+**Voice picker with a baked-in sample:** a new picker (reachable from the
+same "more" settings screen as the existing `triggerTimerId` picker in
+`EditActivityMoreDialog.kt`) lists the available voices, each with a play
+button that speaks one fixed sample line so you can actually judge the voice
+before committing — not generic demo text, this specific line: *"Make sure
+this voice is what you really want to listen to all day, or otherwise you
+will get annoyed at it - and quickly."* Since the sample text is always the
+same, every voice's sample can be pre-baked once (first time the picker opens)
+through the same bakery pipeline as everything else, so previews play back
+instantly rather than waiting on a fresh render each time you tap one.
 
 **Why this is a small, contained change:** item 10 already moved this app to
 "bake once at save time, always play from a cached file." The bake step
@@ -389,12 +404,31 @@ once the plumbing exists, not a blocker.
 **App changes:**
 - `TtsBakeryWorker.synthesize()`: replace the on-device
   `synthesizeToFile` call with an HTTP POST to the configured server's
-  `/v1/audio/speech` endpoint, save the returned audio to the existing disk
-  cache.
+  `/v1/audio/speech` endpoint (voice name included in the request), save the
+  returned audio to the disk cache.
+- **Cache key must become `(voice, text)`, not just `text`.** Today's cache
+  (`TtsBakeryDiskCache`) is keyed on phrase text alone, which was fine with
+  one global voice — with per-timer voice, "3... 2... 1..." spoken by Nicole
+  and by Bella need to be two different cache entries, not a collision. Every
+  call site that bakes or looks up a phrase (`TtsSpeaker.speak`,
+  `TtsBakery.scheduleBaking`/`getSpeechFile`, `TtsBakeryWorker`) needs the
+  voice threaded through, not just the text.
+- **New per-timer field:** `TimerMoreEntity.ttsVoice: String? = null` (null =
+  fall back to a single app-wide default voice setting, so timers created
+  before this feature keep working unchanged). Adding a `more` field means
+  touching the same handful of places the existing code comment already
+  flags for it: `TestData`, `TimerMoreMapper`, `MappersTest`, `OneFragment`,
+  `EditActivity` — plus the step/timer JSON adapter, so item 7's JSON
+  import/export round-trips the chosen voice too.
+- **Run-engine plumbing:** wherever a running timer currently triggers
+  `TtsSpeaker.speak(...)` for a `VOICE` behavior (`TimerMachine.kt` /
+  `MachinePresenter.kt`), it needs to read the current timer's `ttsVoice` and
+  pass it along, not assume a single global voice.
 - New setting: server address (`http://<mac-local-ip>:8880`, from the Kokoro
-  image's default port) and voice name, with a "test connection" action.
-  Local IPs can drift on DHCP — worth reserving a static IP for the Mac in
-  your router settings so this doesn't need re-entering.
+  image's default port), with a "test connection" action, plus the app-wide
+  default voice used when a timer hasn't picked one. Local IPs can drift on
+  DHCP — worth reserving a static IP for the Mac in your router settings so
+  this doesn't need re-entering.
 - Baking job's network constraint goes back to `NetworkType.CONNECTED` (item
   10 dropped it because on-device synthesis needed no network; this path
   does). If your Mac is off or you're off home WiFi when saving a timer, the
@@ -406,9 +440,11 @@ once the plumbing exists, not a blocker.
   mid-run), `TtsSpeaker.kt` already falls back to the on-device engine live
   rather than staying silent. Worse quality in that one case, never silence.
 
-**Effort:** 1–2 days for the app-side change; separately, get comfortable
-running the Docker container and picking a voice you like before writing any
-code — that part is pure listening, not engineering.
+**Effort:** 3–5 days for the app-side change — bumped up from the original
+single-global-voice estimate, since per-timer voice touches the cache key,
+the run engine, and a new picker UI, not just the bake step. Separately, get
+comfortable running the Docker container and picking voices you like before
+writing any code — that part is pure listening, not engineering.
 
 **Status:** not started
 
