@@ -12,12 +12,13 @@ use only (see licensing note at the bottom).
 - [ ] [3. Day-of-week condition](#3-day-of-week-condition-on-a-step-or-group)
 - [ ] [4. Time-of-day range condition](#4-time-of-day-range-condition)
 - [ ] [5. QR-scan dismiss mode for HALT](#5-qr-scan-dismiss-mode-for-halt)
-- [ ] [6. Search timers by name](#6-search-timers-by-name)
-- [ ] [7. Import a timer from a JSON file](#7-import-a-timer-from-a-json-file-including-google-drive)
-- [ ] [8. Composable timers](#8-composable-timers--run-a-saved-timer-as-a-step-n-times)
-- [ ] [9. Local music playlist](#9-local-music-playlist--searchable-persists-across-steps-layers-with-alerts)
-- [ ] [10. Proactive, offline-capable TTS pre-baking](#10-proactive-offline-capable-tts-pre-baking)
-- [ ] [11. Self-hosted high-quality TTS voice](#11-self-hosted-high-quality-tts-voice)
+- [ ] [6. Searchable step-level activity log](#6-searchable-step-level-activity-log)
+- [ ] [7. Search timers by name](#7-search-timers-by-name)
+- [ ] [8. Import a timer from a JSON file](#8-import-a-timer-from-a-json-file-including-google-drive)
+- [ ] [9. Composable timers](#9-composable-timers--run-a-saved-timer-as-a-step-n-times)
+- [ ] [10. Local music playlist](#10-local-music-playlist--searchable-persists-across-steps-layers-with-alerts)
+- [ ] [11. Proactive, offline-capable TTS pre-baking](#11-proactive-offline-capable-tts-pre-baking)
+- [ ] [12. Self-hosted high-quality TTS voice](#12-self-hosted-high-quality-tts-voice)
 
 Check a box and flip its section's `Status:` line to `done` in the same commit
 that merges the feature branch into `personal`.
@@ -197,7 +198,71 @@ alternatives).
 
 **Manual test:** _(fill in after building)_
 
-## 6. Search timers by name
+## 6. Searchable step-level activity log
+
+Branch: `feat/step-activity-log`
+
+**What:** answer "when was the last time I did X?" (e.g. "took my medication") by
+recording every individual step completion — not just whole-timer runs — with a
+timestamp (local date + time), the timer name, the step name, and how it ended
+(auto-advanced when its countdown hit zero, or manually dismissed). Searchable by
+timer name or step text, sorted newest-first, so the answer is a one-line search
+away instead of scrolling a calendar.
+
+**What already exists (the "rudiment"):** `TimerStampEntity` (id, timerId, start,
+end — `domain/.../entities/TimerStampEntity.kt`) plus `TimerStampRepository` and
+`AddTimerStamp`, recorded once per full timer run in
+`MachinePresenter.end():591` using that run's begin time and "now". `GetRecords.kt`
+turns these into the existing Record screens (`app-timer-list/.../record/`): an
+overview pie chart, a timeline bar chart, and a calendar heatmap with a day list.
+This is timer-run granularity only — it can say "you ran the Meds timer 3 times
+last Tuesday" but not "you confirmed the Ibuprofen step at 2:14 PM" — and it has
+no text search and no record of how a step ended.
+
+**Design:**
+- New `StepStampEntity(id, timerId, timerName, stepName, timestamp, confirmMethod)`
+  where `confirmMethod` is `AUTO` (countdown reached zero) or `MANUAL` (dismissed
+  by hand today; item 5 will add QR as a second manual variant once it exists —
+  worth widening this to `AUTO` / `TAP` / `QR` at that point rather than a single
+  `MANUAL` bucket). `timerName`/`stepName` are stored as plain-text snapshots, not
+  foreign keys — `StepEntity.Step` (`domain/.../entities/StepEntity.kt:8`) has no
+  stable id, only a `label`, and timers/steps can be renamed or deleted later. A
+  snapshot keeps old log entries readable and searchable regardless of later edits,
+  and it's also exactly what full-text search needs to match against.
+- Hook point: `TimerMachine.kt`'s per-step task already distinguishes the two
+  completion paths structurally — `CountDownTimerTask.onFinish()`
+  (`.../stream/task/CountDownTimerTask.kt:38`, fires when the countdown reaches
+  zero — this is "auto") vs `StopwatchTask.onFinish()`
+  (`.../stream/task/StopwatchTask.kt:46`, fires when a HALT step is stopped by an
+  explicit action — this is "manual"). That's the natural place to record a step
+  stamp with its confirm method, alongside (not instead of) the existing
+  timer-level stamp already recorded in `MachinePresenter.end()`.
+- New Room table + DAO (`StepStampDao`): insert, plus a search query —
+  `SELECT * FROM StepStamp WHERE timerName LIKE '%' || :query || '%' OR stepName
+  LIKE '%' || :query || '%' ORDER BY timestamp DESC`.
+- New searchable log screen: a single search box (same pattern as item 7's timer
+  search) over a newest-first list, each row showing date + time, timer name, step
+  name, and how it ended (e.g. an "auto" vs "dismissed" label or icon).
+- No retention/pruning policy for now — personal-scale volume (a handful of steps
+  a day) makes this a non-issue; revisit only if storage or list performance ever
+  becomes noticeable.
+
+**Touches:** `StepStampEntity.kt` (domain) · `StepStampRepository` interface + impl
+(data) · new Room entity/DAO + migration · `AddStepStamp` use case ·
+`SearchStepStamps` use case · new ViewModel · new screen (list + search box) ·
+wire the recording call into `TimerMachine.kt`'s per-task completion (or
+`MachinePresenter.kt` at the same point each task finishes) so it fires once per
+step, not just once per full run.
+
+**Effort:** 2–3 days — a new table/migration, one use-case pair, and one new
+searchable list screen, building on the existing stamp/record pattern already in
+the codebase; smaller than composable timers or the soundtrack feature.
+
+**Status:** not started
+
+**Manual test:** _(fill in after building)_
+
+## 7. Search timers by name
 
 Branch: `feat/timer-search`
 
@@ -217,7 +282,7 @@ toolbar `SearchView` in `TimerFragment`.
 
 **Manual test:** _(fill in after building)_
 
-## 7. Import a timer from a JSON file (including Google Drive)
+## 8. Import a timer from a JSON file (including Google Drive)
 
 Branch: `feat/timer-json-import`
 
@@ -250,7 +315,7 @@ works.
 
 **Manual test:** _(fill in after building)_
 
-## 8. Composable timers — run a saved timer as a step, N times
+## 9. Composable timers — run a saved timer as a step, N times
 
 Branch: `feat/composable-timer-step`
 
@@ -294,7 +359,7 @@ list UI (new step type, reusing `TimerPicker`) · `DeleteTimer` use case (new
 
 **Manual test:** _(fill in after building)_
 
-## 9. Local music playlist — searchable, persists across steps, layers with alerts
+## 10. Local music playlist — searchable, persists across steps, layers with alerts
 
 Branch: `feat/timer-soundtrack`
 
@@ -310,7 +375,7 @@ own app's audio, so there's no need for the cross-app ducking dance.
 textbox, live-filtered against Android's `MediaStore.Audio.Media` (title,
 artist, album, filename columns), not a folder or file picker. Requires
 `READ_MEDIA_AUDIO` (Android 13+) / `READ_EXTERNAL_STORAGE` on older versions.
-Reuses the same search-box pattern as item 6, applied to a different list.
+Reuses the same search-box pattern as item 7, applied to a different list.
 Confirmed use case: your own downloaded local files, not a streaming
 service's DRM'd downloads — those aren't visible to `MediaStore` at all, so
 this design only works because the files are genuinely yours on-device.
@@ -344,7 +409,7 @@ here) — the biggest single item in this batch.
 
 **Manual test:** _(fill in after building)_
 
-## 10. Proactive, offline-capable TTS pre-baking
+## 11. Proactive, offline-capable TTS pre-baking
 
 Branch: `feat/tts-proactive-bake`
 
@@ -379,7 +444,7 @@ worth confirming once on your device regardless of what we build here.
 
 **Manual test:** _(fill in after building)_
 
-## 11. Self-hosted high-quality TTS voice, chosen per timer
+## 12. Self-hosted high-quality TTS voice, chosen per timer
 
 Branch: `feat/tts-self-hosted-voice`
 
@@ -405,7 +470,7 @@ same, every voice's sample can be pre-baked once (first time the picker opens)
 through the same bakery pipeline as everything else, so previews play back
 instantly rather than waiting on a fresh render each time you tap one.
 
-**Why this is a small, contained change:** item 10 already moved this app to
+**Why this is a small, contained change:** item 11 already moved this app to
 "bake once at save time, always play from a cached file." The bake step
 (`TtsBakeryWorker.synthesize()`) currently calls the on-device
 `TextToSpeech.synthesizeToFile(...)`; playback (`TtsSpeaker.kt`) already just
@@ -442,7 +507,7 @@ once the plumbing exists, not a blocker.
   before this feature keep working unchanged). Adding a `more` field means
   touching the same handful of places the existing code comment already
   flags for it: `TestData`, `TimerMoreMapper`, `MappersTest`, `OneFragment`,
-  `EditActivity` — plus the step/timer JSON adapter, so item 7's JSON
+  `EditActivity` — plus the step/timer JSON adapter, so item 8's JSON
   import/export round-trips the chosen voice too.
 - **Run-engine plumbing:** wherever a running timer currently triggers
   `TtsSpeaker.speak(...)` for a `VOICE` behavior (`TimerMachine.kt` /
@@ -454,7 +519,7 @@ once the plumbing exists, not a blocker.
   DHCP — worth reserving a static IP for the Mac in your router settings so
   this doesn't need re-entering.
 - Baking job's network constraint goes back to `NetworkType.CONNECTED` (item
-  10 dropped it because on-device synthesis needed no network; this path
+  11 dropped it because on-device synthesis needed no network; this path
   does). If your Mac is off or you're off home WiFi when saving a timer, the
   HTTP call just fails and WorkManager's existing retry-with-backoff
   (`Result.retry()` in `TtsBakeryWorker.kt:64`) picks it up next time
