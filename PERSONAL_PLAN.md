@@ -17,6 +17,7 @@ use only (see licensing note at the bottom).
 - [ ] [8. Composable timers](#8-composable-timers--run-a-saved-timer-as-a-step-n-times)
 - [ ] [9. Local music playlist](#9-local-music-playlist--searchable-persists-across-steps-layers-with-alerts)
 - [ ] [10. Proactive, offline-capable TTS pre-baking](#10-proactive-offline-capable-tts-pre-baking)
+- [ ] [11. Self-hosted high-quality TTS voice](#11-self-hosted-high-quality-tts-voice)
 
 Check a box and flip its section's `Status:` line to `done` in the same commit
 that merges the feature branch into `personal`.
@@ -353,6 +354,82 @@ worth confirming once on your device regardless of what we build here.
 **Status:** not started
 
 **Manual test:** _(fill in after building)_
+
+## 11. Self-hosted high-quality TTS voice
+
+Branch: `feat/tts-self-hosted-voice`
+
+**What:** swap the on-device Android TTS engine (the "shitty" one) for a
+self-hosted neural voice running on your Mac, reachable over local WiFi. No
+cloud account, no API key, no ongoing cost, ever — chosen over a cloud
+provider (Azure/Google both have generous free tiers, researched and
+documented below for reference if this ever changes) specifically to avoid
+depending on an external account and to keep everything on your own network.
+
+**Why this is a small, contained change:** item 10 already moved this app to
+"bake once at save time, always play from a cached file." The bake step
+(`TtsBakeryWorker.synthesize()`) currently calls the on-device
+`TextToSpeech.synthesizeToFile(...)`; playback (`TtsSpeaker.kt`) already just
+plays whatever audio file is in the cache via `RingtonePreviewKlaxon`,
+regardless of where that file came from. So this is really just: change what
+produces the cached file, from a local API call to a local-network HTTP call.
+Nothing about caching or playback needs to change.
+
+**Server:** [Kokoro-82M](https://github.com/hwdsl2/docker-kokoro) — Apache
+2.0 (no usage restrictions), runs fine on CPU, 54 voices across 8 languages,
+faster than real-time, and this Docker image already exposes an
+OpenAI-compatible `/v1/audio/speech` HTTP endpoint with no signup or key
+needed. One `docker run` on your Mac. Worth an ear-test against
+[Chatterbox](https://github.com/resemble-ai/chatterbox) (MIT license) too —
+reportedly preferred over ElevenLabs in Resemble's own blind listening test —
+though its Docker/API packaging wasn't confirmed during research the way
+Kokoro's was, so start with Kokoro and treat Chatterbox as a possible swap
+once the plumbing exists, not a blocker.
+
+**App changes:**
+- `TtsBakeryWorker.synthesize()`: replace the on-device
+  `synthesizeToFile` call with an HTTP POST to the configured server's
+  `/v1/audio/speech` endpoint, save the returned audio to the existing disk
+  cache.
+- New setting: server address (`http://<mac-local-ip>:8880`, from the Kokoro
+  image's default port) and voice name, with a "test connection" action.
+  Local IPs can drift on DHCP — worth reserving a static IP for the Mac in
+  your router settings so this doesn't need re-entering.
+- Baking job's network constraint goes back to `NetworkType.CONNECTED` (item
+  10 dropped it because on-device synthesis needed no network; this path
+  does). If your Mac is off or you're off home WiFi when saving a timer, the
+  HTTP call just fails and WorkManager's existing retry-with-backoff
+  (`Result.retry()` in `TtsBakeryWorker.kt:64`) picks it up next time
+  something connects — no new retry logic needed.
+- **Already-existing safety net, no work needed:** if a phrase is ever
+  actually spoken before it's been baked (edge case — new content encountered
+  mid-run), `TtsSpeaker.kt` already falls back to the on-device engine live
+  rather than staying silent. Worse quality in that one case, never silence.
+
+**Effort:** 1–2 days for the app-side change; separately, get comfortable
+running the Docker container and picking a voice you like before writing any
+code — that part is pure listening, not engineering.
+
+**Status:** not started
+
+**Manual test:** _(fill in after building)_
+
+### Cloud options, for reference (not being used, self-hosting was chosen)
+
+Researched in case self-hosting ever stops being worth it. Every provider's
+free tier is enormous relative to actual personal alarm-phrase volume (short
+text, each phrase synthesized once thanks to caching), so "free" here means
+genuinely free at this scale, not a teaser tier:
+
+| Provider | Free tier | Then | Notes |
+|---|---|---|---|
+| [Azure Neural TTS](https://texttolab.com/blog/azure-text-to-speech-pricing) | 500K chars/mo, **doesn't expire** | $16/1M | Best "free forever" option if cloud is ever wanted |
+| [Google Chirp 3: HD](https://docs.cloud.google.com/text-to-speech/docs/list-voices-and-types) | 1M chars/mo | $30/1M | Newer/broader than the "Journey" voices already tried |
+| [Amazon Polly Neural](https://texttolab.com/blog/amazon-polly-pricing) | 1M chars/mo, **first 12 months only** | $16/1M | Free tier expires |
+| [ElevenLabs](https://texttolab.com/pricing) | 10K chars/mo | $5/mo for 30K | Free tier too small to be useful here |
+| [OpenAI TTS](https://texttolab.com/blog/openai-tts-pricing) | none (one-time $5 signup credit) | $15–30/1M | No ongoing free tier |
+
+All of these need a cloud account and API key even to use the free tier.
 
 ---
 
