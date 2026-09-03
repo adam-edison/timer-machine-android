@@ -6,7 +6,7 @@ use only (see licensing note at the bottom).
 
 ## Status
 
-- [ ] [0. Personal branding](#0-personal-branding-do-first)
+- [x] [0. Personal branding](#0-personal-branding-do-first)
 - [ ] [1. Total timer duration shown in the list](#1-total-timer-duration-shown-in-the-list)
 - [ ] [2. Nagging reminder interval on HALT](#2-nagging-reminder-interval-on-halt)
 - [ ] [3. Day-of-week condition](#3-day-of-week-condition-on-a-step-or-group)
@@ -59,9 +59,33 @@ alongside the existing `dog` / `google` / `other` flavors already defined in
 - No changes to any shared file — everything lives in the new flavor's own source
   set, so this can never conflict with an upstream merge.
 
-**Status:** not started
+**How it was actually built:**
+- `FlavorData.Flavor` (`app-base`) only has `Dog`/`Google`/`Other` — adding a
+  `Personal` case would mean touching a shared file. Instead
+  `app/src/personal/.../FlavorDataImpl.kt` reports `Flavor.Other`, same as the
+  `other` flavor: it only gates Play-review-specific behavior (billing/in-app
+  review) off, which is correct for a sideloaded build too.
+- `"personalImplementation"(project(":app-analytics-fake"))` added alongside
+  `dog`/`other` in `app/build.gradle.kts` — needed for the same fake-analytics
+  Hilt binding those flavors use; without it the DI graph doesn't compile for
+  this variant.
+- The launcher icon is a vector adaptive icon (`ic_launcher_background.xml` +
+  `ic_launcher_foreground.xml` in `app-base`), not flat PNGs, so the tint was
+  applied by overriding just `app/src/personal/res/drawable/ic_launcher_background.xml`
+  with a solid near-black fill — same clock glyph foreground, clearly different
+  background color/pattern at a glance. Legacy pre-API26 `app_icon_square`/
+  `app_icon_round` PNG fallbacks were left untouched (not used on the target
+  device, min SDK 23 devices would still see the stock icon there).
 
-**Manual test:** _(fill in after building)_
+**Status:** done
+
+**Manual test:** Built `feat/personal-branding` off `develop`, ran
+`./gradlew installPersonalDebug` over USB. Installed and launched alongside the
+existing Play Store build (`io.github.deweyreed.timer.google`) as a separate
+package (`io.github.deweyreed.timer.personal`) with no clash. Confirmed on
+device: app name shows "Timer Machine (Mine)" and the launcher icon shows the
+tinted near-black background. Merged into `personal` via
+`git merge --no-ff feat/personal-branding`.
 
 ## 1. Total timer duration shown in the list
 
