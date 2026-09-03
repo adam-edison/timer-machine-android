@@ -16,6 +16,7 @@ use only (see licensing note at the bottom).
 - [ ] [7. Import a timer from a JSON file](#7-import-a-timer-from-a-json-file-including-google-drive)
 - [ ] [8. Composable timers](#8-composable-timers--run-a-saved-timer-as-a-step-n-times)
 - [ ] [9. Local music playlist](#9-local-music-playlist--searchable-persists-across-steps-layers-with-alerts)
+- [ ] [10. Proactive, offline-capable TTS pre-baking](#10-proactive-offline-capable-tts-pre-baking)
 
 Check a box and flip its section's `Status:` line to `done` in the same commit
 that merges the feature branch into `personal`.
@@ -313,6 +314,41 @@ beep/TTS path.
 **Effort:** 4–6 days — fuzzy re-matching adds a bit over the original
 estimate, real on-device audio testing still required (OEM quirks are common
 here) — the biggest single item in this batch.
+
+**Status:** not started
+
+**Manual test:** _(fill in after building)_
+
+## 10. Proactive, offline-capable TTS pre-baking
+
+Branch: `feat/tts-proactive-bake`
+
+**What:** this app already has a real TTS disk-cache feature — "Text-to-speech
+bakery" (Settings toggle `pref_is_tts_bakery_open`) — that renders any spoken
+phrase to a file via the on-device engine's `synthesizeToFile` and reuses it
+next time (`TtsBakery.kt`, `TtsBakeryWorker.kt`). Two gaps stand between that
+and "guaranteed offline": it only bakes a phrase *after* you've heard it live
+once (`TtsSpeaker.kt:334-336`), and the background baking job requires network
+(`Constraints(requiredNetworkType = NetworkType.CONNECTED)` in
+`TtsBakery.kt:21-27`) even though the render itself is entirely local.
+
+**Change:** when a timer is saved, walk every `VOICE` behavior's text across
+all its steps and schedule baking for each one immediately, instead of
+waiting for a live run to trigger it. Drop the baking job's network
+requirement (`NetworkType.NOT_REQUIRED`) since `synthesizeToFile` doesn't
+actually call out anywhere. Net effect: save a timer once (while the app is
+running, so WorkManager can execute), and every phrase in it is a cached local
+file before you ever hit "start" — nothing left to synthesize on the fly,
+signal or no signal. Still depends on the OS-level offline voice pack being
+installed for your language (Settings → System → Languages & input →
+Text-to-speech output → engine settings) — that's outside this app's control,
+worth confirming once on your device regardless of what we build here.
+
+**Touches:** `SaveTimer.kt` / `AddTimer.kt` (walk steps, collect distinct
+`VOICE` text, call `TtsBakery.scheduleBaking` per phrase) · `TtsBakery.kt`
+(constraint change).
+
+**Effort:** well under a day — wiring on top of an existing, working system.
 
 **Status:** not started
 
