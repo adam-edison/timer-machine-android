@@ -86,6 +86,10 @@ android {
             dimension = "market"
             applicationIdSuffix = ".other"
         }
+        create("personal") {
+            dimension = "market"
+            applicationIdSuffix = ".personal"
+        }
     }
     dependenciesInfo {
         includeInApk = false
@@ -125,6 +129,7 @@ dependencies {
     "googleImplementation"(project(":flavor-google"))
     "dogImplementation"(project(":app-analytics-fake"))
     "otherImplementation"(project(":app-analytics-fake"))
+    "personalImplementation"(project(":app-analytics-fake"))
 
     // baselineProfile(project(":baselineprofile"))
 
