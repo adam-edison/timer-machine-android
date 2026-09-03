@@ -4,6 +4,22 @@ Working branch: `personal`, cut from `develop` (this fork's main). Not intended 
 upstream contribution. Stays a private, GPLv3-compliant modified version for personal
 use only (see licensing note at the bottom).
 
+## Status
+
+- [ ] [0. Personal branding](#0-personal-branding-do-first)
+- [ ] [1. Total timer duration shown in the list](#1-total-timer-duration-shown-in-the-list)
+- [ ] [2. Nagging reminder interval on HALT](#2-nagging-reminder-interval-on-halt)
+- [ ] [3. Day-of-week condition](#3-day-of-week-condition-on-a-step-or-group)
+- [ ] [4. Time-of-day range condition](#4-time-of-day-range-condition)
+- [ ] [5. QR-scan dismiss mode for HALT](#5-qr-scan-dismiss-mode-for-halt)
+- [ ] [6. Search timers by name](#6-search-timers-by-name)
+- [ ] [7. Import a timer from a JSON file](#7-import-a-timer-from-a-json-file-including-google-drive)
+- [ ] [8. Composable timers](#8-composable-timers--run-a-saved-timer-as-a-step-n-times)
+- [ ] [9. Local music playlist](#9-local-music-playlist--searchable-persists-across-steps-layers-with-alerts)
+
+Check a box and flip its section's `Status:` line to `done` in the same commit
+that merges the feature branch into `personal`.
+
 ## Workflow
 
 - Each feature below gets its own branch, cut from `develop`: `feat/<name>`.
