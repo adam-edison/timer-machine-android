@@ -266,17 +266,37 @@ own app's audio, so there's no need for the cross-app ducking dance.
 
 **Playlist builder — corrected from the original spec:** a single search
 textbox, live-filtered against Android's `MediaStore.Audio.Media` (title,
-artist, filename columns), not a folder or file picker. Requires
+artist, album, filename columns), not a folder or file picker. Requires
 `READ_MEDIA_AUDIO` (Android 13+) / `READ_EXTERNAL_STORAGE` on older versions.
 Reuses the same search-box pattern as item 6, applied to a different list.
+Confirmed use case: your own downloaded local files, not a streaming
+service's DRM'd downloads — those aren't visible to `MediaStore` at all, so
+this design only works because the files are genuinely yours on-device.
+
+**Cross-device portability — fuzzy match, not exact:** a `MediaStore` row ID
+or content URI is specific to one device's database and won't resolve on a
+different phone (or after a rescan on the same one). So each saved playlist
+track stores its metadata (title, artist, album, filename), not just a URI.
+At playback time: try the last-known URI first (cheap, works when nothing's
+changed); if that fails to resolve, fall back to a fuzzy match against that
+device's `MediaStore` — normalize both sides (lowercase, strip punctuation/
+diacritics/noise like "(remastered)" or "feat. X"), score similarity per
+field with a small hand-rolled string-distance function (no external library
+needed at this library size), weighted title > artist > album/filename, and
+accept the best candidate only above a confidence threshold. Below that
+threshold the track is flagged unresolved rather than guessing — the rest of
+the playlist keeps playing, and the unresolved track surfaces somewhere you
+can manually reselect it on that device.
 
 **Touches:** new runtime permission · `MediaStore` query + search UI · new
-playlist entity/DB table · a player component with its own lifecycle
-independent of step advancement · manual-duck logic layered onto the existing
-audio-focus/beep/TTS path.
+playlist entity/DB table · fuzzy-match utility (normalize + weighted
+similarity scoring) · a player component with its own lifecycle independent
+of step advancement · manual-duck logic layered onto the existing audio-focus/
+beep/TTS path.
 
-**Effort:** 3–5 days, real on-device audio testing required (OEM quirks are
-common here) — the biggest single item in this batch.
+**Effort:** 4–6 days — fuzzy re-matching adds a bit over the original
+estimate, real on-device audio testing still required (OEM quirks are common
+here) — the biggest single item in this batch.
 
 **Status:** not started
 
