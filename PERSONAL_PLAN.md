@@ -8,7 +8,7 @@ use only (see licensing note at the bottom).
 
 - [x] [0. Personal branding](#0-personal-branding-do-first)
 - [x] [1. Total timer duration shown in the list](#1-total-timer-duration-shown-in-the-list)
-- [ ] [2. Nagging reminder interval on HALT](#2-nagging-reminder-interval-on-halt)
+- [x] [2. Confirm behavior — count down, then wait for manual confirmation, with nagging](#2-confirm-behavior--count-down-then-wait-for-manual-confirmation-with-nagging)
 - [ ] [3. Day-of-week condition](#3-day-of-week-condition-on-a-step-or-group)
 - [ ] [4. Time-of-day range condition](#4-time-of-day-range-condition)
 - [ ] [5. QR-scan dismiss mode for HALT](#5-qr-scan-dismiss-mode-for-halt)
@@ -19,19 +19,20 @@ use only (see licensing note at the bottom).
 - [ ] [10. Local music playlist](#10-local-music-playlist--searchable-persists-across-steps-layers-with-alerts)
 - [ ] [11. Proactive, offline-capable TTS pre-baking](#11-proactive-offline-capable-tts-pre-baking)
 - [ ] [12. Self-hosted high-quality TTS voice](#12-self-hosted-high-quality-tts-voice)
+- [ ] [13. Sound sequencing across behaviors on one step](#13-sound-sequencing-across-behaviors-on-one-step)
 
 Check a box and flip its section's `Status:` line to `done` in the same commit
 that merges the feature branch into `personal`.
 
 ## Workflow
 
-- Each feature below gets its own branch, cut from `develop`: `feat/<name>`.
+- Each feature below gets its own branch, cut from `personal`: `feat/<name>`.
 - Build and manually test it, then merge into `personal` with `git merge --no-ff feat/<name>`.
 - Commits within a feature branch follow [Conventional Commits](https://www.conventionalcommits.org/):
   `feat(scope): summary`, `fix(scope): summary`, etc.
-- Cutting from `develop` (not from `personal`) keeps each feature branch easy to diff
-  or rebase against upstream later, and keeps `git pull` / merges from the official
-  repo's `develop` into `personal` conflict-free from unrelated work.
+- Cutting from `personal` (not from `develop`) means manual testing always exercises
+  the real running app — every previously merged personal feature included — instead
+  of a stripped-down build missing everything but the one feature under test.
 - After this initial batch of quick wins, later work (the bigger personal-only
   features — playlists, TickTick, AI TTS, composable timers, etc.) goes straight onto
   `personal` as plain conventional commits, no separate feature branch per item.
@@ -137,26 +138,130 @@ on-device: every timer in both list and grid view shows its total duration
 under its name, styled larger and pale blue, legible in both light and dark
 theme. Merged into `personal` via `git merge --no-ff feat/timer-duration-display`.
 
-## 2. Nagging reminder interval on HALT
+## 2. Confirm behavior — count down, then wait for manual confirmation, with nagging
 
 Branch: `feat/halt-nag-interval`
 
-**What:** add a repeat interval to the existing `HALT` behavior — while a step is
-halted, replay its TTS/beep every N seconds instead of once, until dismissed.
+**What:** originally scoped as "add a nag interval to the existing HALT behavior."
+Turned out HALT doesn't do what it sounds like it should for this use case — see
+below — so this became a new, separate behavior instead: **Confirm**. A step with
+Confirm counts down its configured length exactly like a normal step (any other
+behaviors on it — Beep/Voice/Half/Count — fire on their usual schedule during that
+countdown). Once the countdown reaches zero, the step doesn't advance: it holds
+indefinitely, plays its alert (Voice/Beep) once, and — if a nag interval is set —
+replays that alert every N seconds until you manually move on (the existing
+"Next" action, available from the running notification and from the running
+screen's configurable action buttons). 0 means "alert once when done, never nag."
 
-**Touches:** `BehaviourEntity.kt` (new field) · `MachinePresenter.kt` /
-`TimerMachine.kt` (halt loop) · `BehaviourSettingsView.kt` (interval input) ·
-`BehaviourDataJsonAdapter.kt` (serialization).
+**Why not just extend HALT:** read `TimerMachine.kt` before writing anything and
+found HALT doesn't count down through the step's length at all — the moment a
+HALT step starts, the whole step becomes an indefinite up-counting stopwatch from
+time zero (`StopwatchTask`, chosen unconditionally). The step's length field is
+stored and shown in the editor but never used at runtime for a HALT step; it
+always has been "halt instantly," never "count down, then halt." Retrofitting a
+lead-in countdown onto HALT would have silently changed the runtime behavior of
+every HALT step in every timer already built, for a behavior most people
+presumably use specifically because it's instant (e.g. a bare confirmation
+step with 0:00 length). Building a separate **Confirm** behavior keeps HALT
+exactly as-is and adds the new "count down, then wait" semantics as an opt-in.
 
-**Watch for:** the codebase flags, in a comment, four places that need updating for
-any new behavior field — find it before writing this one, since it applies to
-every feature below that touches a behavior too.
+**Mutually exclusive with HALT:** both behaviors claim what happens when a step's
+countdown timing ends, so a step can only have one, not both — enforced in
+`EditableBehaviourLayout.kt`'s add-behavior menu (adding one hides the other).
 
-**Effort:** 0.5–1 day.
+**Design:**
+- New `BehaviourType.CONFIRM`, `ConfirmAction(nagIntervalSeconds: Int = 0,
+  content: String = "")` in `BehaviourEntity.kt` (`domain`) — `str1` holds the
+  interval (same int-in-a-string pattern as `NotificationAction`/`CountAction`),
+  `str2` holds the spoken content, same shape as `VoiceAction.content`/`content2`.
+  No new Room column or JSON adapter change needed — `str1`/`str2` are already
+  generic per-behavior-type columns, and `BehaviourDataJsonAdapter` already
+  round-trips them for every type.
+- Confirm has its own spoken line, independent of any separate `VOICE` behavior
+  on the step — default `ConfirmAction.DEFAULT_CONTENT = "Did you finish
+  {step_name}?"`, editable to anything via the same `{variable}` picker Voice's
+  "new variables" mode uses (see the variable-substitution trap below for why
+  it must go through `content2`, not `content`).
+- New `ConfirmTask` (`presentation/.../stream/task/ConfirmTask.kt`): a task that
+  behaves like `CountDownTimerTask` for `length`, then — instead of finishing and
+  letting the step advance — switches internally into an indefinite phase like
+  `StopwatchTask`'s, ticking once a second via a dedicated `onConfirmTick`
+  callback (not the shared per-second `TickListener` list used by
+  Beep/Half/Count, which only fire during the countdown phase — that's what
+  makes "count down normally, then wait" true without touching those listeners
+  at all). `TimerMachine.toTask()` picks `ConfirmTask` when a step has a
+  `CONFIRM` behavior, ahead of the existing `HALT` → `StopwatchTask` check.
+  `TimerMachine.Listener.confirmAlert(timerId, index)` replaces the alert-replay
+  logic that was briefly named `nagHalt` during the false start above; it's
+  called once when the wait begins and again on every nag interval.
+- `MachinePresenter.confirmAlert()` replays just that step's Beep + Confirm's
+  own voice line — not a full `startBehaviours()` re-run, so it doesn't restart
+  Music, Vibration, the fullscreen overlay, or the flashlight, which keep
+  running undisturbed through the wait.
 
-**Status:** not started
+**Watch for — three traps found the hard way, in the order hit:**
+1. The codebase flags, in a comment (`TimerMoreEntity` in `TimerEntity.kt`),
+   several places that need updating for any new *`more`* field (`TestData`,
+   `TimerMoreMapper`, `MappersTest`, `OneFragment`, `EditActivity`) — didn't
+   apply here since Confirm's data lives in the existing generic `str1`/`str2`
+   columns, not a new `more` field, but worth rechecking for any future
+   behavior field that doesn't fit that pattern.
+2. **The behavior settings popup is implemented twice.** Tapping a behavior
+   chip to configure it is handled once in `UpdateStepDialog.kt` and again,
+   separately, in `EditActivity.kt` (`EditableStep.kt` just forwards to
+   whichever one owns the click). The `Create Timer` screen's inline step list
+   uses `EditActivity`'s copy; adding the new case to only `UpdateStepDialog.kt`
+   first meant the settings item silently didn't show up (only "Delete" did)
+   until the second copy was found and patched too. Same trap will apply to any
+   future behavior with its own settings UI.
+3. **Two parallel variable-substitution systems, only one understands
+   `{variable}` tokens.** `TimerMachineHelper.generateVoiceContent()` has two
+   completely separate code paths: reading `VoiceAction.content` only replaces
+   the legacy `$variable`-style tokens (`REPLACER_STEP_NAME = "$step_name"`,
+   etc.); reading `VoiceAction.content2` routes into a different function
+   (`variableToValue`) that's the only one that understands the modern
+   `{variable}` tokens (`{step_name}`, `{SName}`, ...) that Voice's "Variables"
+   picker actually inserts. First pass wired Confirm's content through
+   `content` — the default `"Did you finish {step_name}?"` came out spoken
+   literally, brace and all, since nothing on that path recognizes `{...}`.
+   Fixed by always constructing the throwaway `VoiceAction` with `content2 =`
+   (never `content =`) and opening `VoiceVariableDialog` (not the older plain
+   `VoiceDialog`) as Confirm's content editor — Confirm has no legacy data to
+   support, so there was no reason to keep the old token path reachable at all.
+4. **`enableTone()` doesn't make a sound — it only arms the Beeper.** The actual
+   beep happens in `playTone()`, called once per second by `BeepTickListener`
+   during a normal countdown. `confirmAlert()` initially only called
+   `enableTone()` (copied straight from `startBehaviours()`), so Beep silently
+   armed and never fired on a nag. Fixed by also calling `view?.playTone()`
+   right after arming it — one beep pulse per nag event, since there's no
+   per-second ticking during the confirm wait to spread a multi-beep `count`
+   across.
 
-**Manual test:** _(fill in after building)_
+**Effort:** ended up more than the original 0.5–1 day estimate for a plain nag
+field, since it became a new task-lifecycle concept in the timer engine instead
+of a one-field addition to an existing behavior, plus its own spoken-content
+field wired through the correct variable-substitution path.
+
+**Status:** done
+
+**Manual test:** Built on `feat/halt-nag-interval` (cut from `personal`, not
+`develop`, per the updated workflow below), deployed via `scripts/deploy.sh`
+(`personal` flavor) to a physical device. Created a step with Confirm (short
+length, short nag interval) plus Beep. Confirmed on-device:
+- Counts down normally, then holds and starts counting up (the confirm wait)
+  until "Next" is pressed — never auto-advances.
+- Nag interval > 0 repeats the alert every N seconds while waiting; interval = 0
+  asks once when the wait begins and never repeats.
+- "Next" (notification action / running-screen action button) dismisses the
+  wait and advances, same as it always has for any step.
+- Halt (tested separately) behaves exactly as before — untouched by this work.
+- Beep now actually sounds alongside the voice line on every nag, after fixing
+  the `playTone()` gap above.
+- Default content "Did you finish {step_name}?" speaks with the real step name
+  substituted; overriding it via the "Talking Content" item and typing/inserting
+  different text works, after the `content`/`content2` fix above.
+
+Merged into `personal` via `git merge --no-ff feat/halt-nag-interval`.
 
 ## 3. Day-of-week condition on a step or group
 
@@ -585,16 +690,38 @@ genuinely free at this scale, not a teaser tier:
 
 All of these need a cloud account and API key even to use the free tier.
 
+## 13. Sound sequencing across behaviors on one step
+
+Branch: `feat/behavior-sound-sequencing`
+
+**What:** noticed while building item 2 — when a step has more than one
+sound-producing behavior (e.g. Beep + Music + Voice all on the same step), they
+currently fire independently and talk over each other instead of playing in a
+defined order with gaps between them. Add a way to define, per step, the
+sequence sound behaviors play in and the delay between each (e.g. Beep, wait
+0.5s, Music, wait 0.5s, Voice).
+
+**Nice-to-have, last on purpose** — deliberately not designed in detail yet.
+Revisit once the higher-priority items above are done.
+
+**Status:** not started
+
+**Manual test:** _(fill in after building)_
+
 ---
 
 ## Build & install (Mac → Android, USB)
 
-Applies to every feature above once its flavor/variant name is confirmed at
-build 0. Illustrative task names below assume flavor `personal`, build type
-`debug` — Android Gradle Plugin names tasks `install<Flavor><BuildType>`, so
-confirm the exact name once flavor 0 lands (`./gradlew tasks --group install`
-lists them).
+**Quick path: `scripts/deploy.sh`** — builds `installPersonalDebug` for
+whatever branch is currently checked out and launches it on the connected
+device, in one command. Always the `personal` flavor specifically (distinct
+name/icon from item 0), never `dog`/`google`/`other` — those share the stock
+"TimeR Machine" name and icon with each other and with the Play Store install,
+which makes them impossible to tell apart in the app drawer or in search.
+`personal` doesn't have that problem and is what every feature branch should
+be built and tested against, per the workflow above.
 
+One-time setup, done once per Mac/phone pair:
 1. Enable Developer Options and USB debugging on the phone (Settings → About
    phone → tap Build number 7×, then Settings → Developer options → USB
    debugging).
@@ -602,13 +729,14 @@ lists them).
    prompt on the phone.
 3. From the repo root: `adb devices` — confirm the phone shows as `device`, not
    `unauthorized`.
-4. `./gradlew installPersonalDebug` — builds and installs directly over USB in one
-   step.
-   - Alternative if you want the APK file itself:
-     `./gradlew assemblePersonalDebug`, then
-     `adb install -r app/build/outputs/apk/personal/debug/app-personal-debug.apk`.
-5. Launch the app on the phone and confirm the name/icon from item 0 show up, so
-   you can tell at a glance it's this build and not the Play Store version.
+
+Every deploy after that: `scripts/deploy.sh`.
+
+Manual equivalent, if ever needed instead of the script:
+`./gradlew installPersonalDebug` (or `./gradlew assemblePersonalDebug` then
+`adb install -r app/build/outputs/apk/personal/debug/app-personal-debug.apk`
+for the APK file itself), then launch it on the phone and confirm the
+name/icon from item 0 show up.
 
 ## Licensing note
 

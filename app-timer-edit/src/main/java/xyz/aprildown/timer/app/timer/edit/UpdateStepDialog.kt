@@ -29,6 +29,7 @@ import xyz.aprildown.timer.domain.entities.BehaviourType
 import xyz.aprildown.timer.domain.entities.ImageAction
 import xyz.aprildown.timer.domain.entities.StepEntity
 import xyz.aprildown.timer.domain.entities.toBeepAction
+import xyz.aprildown.timer.domain.entities.toConfirmAction
 import xyz.aprildown.timer.domain.entities.toCountAction
 import xyz.aprildown.timer.domain.entities.toHalfAction
 import xyz.aprildown.timer.domain.entities.toImageAction
@@ -256,6 +257,23 @@ class UpdateStepDialog :
                             changeBehaviour(BehaviourType.BEEP) {
                                 it.toBeepAction().copy(respectOtherSound = newPause)
                                     .toBehaviourEntity()
+                            }
+                        }
+                    )
+                }
+                BehaviourType.CONFIRM -> {
+                    addConfirmItems(
+                        context = context,
+                        action = current.toConfirmAction(),
+                        onNagIntervalSeconds = { newInterval ->
+                            changeBehaviour(BehaviourType.CONFIRM) {
+                                it.toConfirmAction().copy(nagIntervalSeconds = newInterval)
+                                    .toBehaviourEntity()
+                            }
+                        },
+                        onContent = { newContent ->
+                            changeBehaviour(BehaviourType.CONFIRM) {
+                                it.toConfirmAction().copy(content = newContent).toBehaviourEntity()
                             }
                         }
                     )

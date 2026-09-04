@@ -10,6 +10,9 @@ package xyz.aprildown.timer.domain.entities
  *     str2: vibration repeat pattern
  * SCREEN:
  *     str1: fullscreen or not (we use str1 instead of bool because bool is true by default)
+ * CONFIRM:
+ *     str1: nag interval in seconds, 0 or "" to replay its TTS/beep only once when confirmation is needed
+ *     str2: spoken content, "" for the default "Did you finish {step_name}?"
  * VOICE:
  *     str1: speak content
  * BEEP:
@@ -30,7 +33,7 @@ package xyz.aprildown.timer.domain.entities
  *     str1: The loops
  */
 enum class BehaviourType {
-    MUSIC, VIBRATION, SCREEN, VOICE, HALT, SKIP, BEEP, HALF, COUNT, NOTIFICATION, FLASHLIGHT, IMAGE;
+    MUSIC, VIBRATION, SCREEN, VOICE, HALT, SKIP, BEEP, HALF, COUNT, NOTIFICATION, FLASHLIGHT, IMAGE, CONFIRM;
 
     val hasBoolValue: Boolean
         get() = this == MUSIC || this == BEEP
@@ -153,6 +156,35 @@ fun BehaviourEntity.toScreenAction(): ScreenAction {
 }
 
 // endregion Screen
+
+// region Confirm
+
+data class ConfirmAction(
+    val nagIntervalSeconds: Int = 0,
+    val content: String = "",
+) : Action {
+    override fun toBehaviourEntity(): BehaviourEntity {
+        return BehaviourEntity(
+            BehaviourType.CONFIRM,
+            str1 = if (nagIntervalSeconds <= 0) "" else nagIntervalSeconds.toString(),
+            str2 = content,
+        )
+    }
+
+    companion object {
+        const val DEFAULT_CONTENT = "Did you finish ${VoiceAction.VARIABLE_STEP_NAME}?"
+    }
+}
+
+fun BehaviourEntity.toConfirmAction(): ConfirmAction {
+    require(type == BehaviourType.CONFIRM)
+    return ConfirmAction(
+        nagIntervalSeconds = str1.toIntOrNull() ?: 0,
+        content = str2,
+    )
+}
+
+// endregion Confirm
 
 // region Voice
 

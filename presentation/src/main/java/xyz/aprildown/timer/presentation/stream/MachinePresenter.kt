@@ -11,13 +11,16 @@ import kotlinx.coroutines.runBlocking
 import xyz.aprildown.timer.domain.di.MainDispatcher
 import xyz.aprildown.timer.domain.entities.BehaviourEntity
 import xyz.aprildown.timer.domain.entities.BehaviourType
+import xyz.aprildown.timer.domain.entities.ConfirmAction
 import xyz.aprildown.timer.domain.entities.FolderEntity
 import xyz.aprildown.timer.domain.entities.HalfAction
 import xyz.aprildown.timer.domain.entities.StepType
 import xyz.aprildown.timer.domain.entities.TimerEntity
 import xyz.aprildown.timer.domain.entities.TimerStampEntity
 import xyz.aprildown.timer.domain.entities.VibrationAction
+import xyz.aprildown.timer.domain.entities.VoiceAction
 import xyz.aprildown.timer.domain.entities.toBeepAction
+import xyz.aprildown.timer.domain.entities.toConfirmAction
 import xyz.aprildown.timer.domain.entities.toCountAction
 import xyz.aprildown.timer.domain.entities.toFlashlightAction
 import xyz.aprildown.timer.domain.entities.toMusicAction
@@ -329,15 +332,7 @@ class MachinePresenter @Inject constructor(
                                         timer = timer,
                                         currentStep = currentStep,
                                         index = index,
-                                        timeFormatter = object : TimeFormatter {
-                                            override fun formatDuration(duration: Long): CharSequence {
-                                                return view?.formatDuration(duration) ?: ""
-                                            }
-
-                                            override fun formatTime(time: Long): CharSequence {
-                                                return view?.formatTime(time) ?: ""
-                                            }
-                                        }
+                                        timeFormatter = viewTimeFormatter(),
                                     ),
                                 sayMore = false,
                                 afterDone = if (musicMaybe != null) {
@@ -353,6 +348,16 @@ class MachinePresenter @Inject constructor(
                     }
                 }
             }
+        }
+    }
+
+    private fun viewTimeFormatter(): TimeFormatter = object : TimeFormatter {
+        override fun formatDuration(duration: Long): CharSequence {
+            return view?.formatDuration(duration) ?: ""
+        }
+
+        override fun formatTime(time: Long): CharSequence {
+            return view?.formatTime(time) ?: ""
         }
     }
 
@@ -630,5 +635,39 @@ class MachinePresenter @Inject constructor(
 
     override fun countRead(content: String) {
         view?.beginReading(content = content, sayMore = true)
+    }
+
+    override fun confirmAlert(timerId: Int, index: TimerIndex) {
+        val timer = timers[timerId]?.timer ?: return
+        val currentStep = timer.getStep(index) ?: return
+        val stepBehaviours = currentStep.behaviour
+
+        stepBehaviours.find { it.type == BehaviourType.BEEP }?.let { behavior ->
+            val action = behavior.toBeepAction()
+            // enableTone only arms the Beeper; playTone is what actually makes a sound
+            // (on a normal countdown, the per-second BeepTickListener calls playTone
+            // on every tick — there's no such ticking during the confirm wait, so a
+            // single explicit beep pulse per nag stands in for that here).
+            view?.enableTone(
+                tone = action.soundIndex,
+                count = action.count,
+                respectOtherSound = action.respectOtherSound
+            )
+            view?.playTone()
+        }
+
+        stepBehaviours.find { it.type == BehaviourType.CONFIRM }?.let { behavior ->
+            val action = behavior.toConfirmAction()
+            view?.beginReading(
+                content = VoiceAction(content2 = action.content.ifBlank { ConfirmAction.DEFAULT_CONTENT })
+                    .generateVoiceContent(
+                        timer = timer,
+                        currentStep = currentStep,
+                        index = index,
+                        timeFormatter = viewTimeFormatter(),
+                    ),
+                sayMore = false,
+            )
+        }
     }
 }

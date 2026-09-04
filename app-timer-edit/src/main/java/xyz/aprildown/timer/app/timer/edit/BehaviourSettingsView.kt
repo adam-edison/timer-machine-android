@@ -25,6 +25,7 @@ import xyz.aprildown.timer.component.key.ListItem
 import xyz.aprildown.timer.component.key.SimpleInputDialog
 import xyz.aprildown.timer.component.key.switchItem
 import xyz.aprildown.timer.domain.entities.BeepAction
+import xyz.aprildown.timer.domain.entities.ConfirmAction
 import xyz.aprildown.timer.domain.entities.CountAction
 import xyz.aprildown.timer.domain.entities.HalfAction
 import xyz.aprildown.timer.domain.entities.MusicAction
@@ -139,6 +140,59 @@ internal fun MaterialPopupMenuBuilder.addScreenItems(
                 }
                 onCheckedChange = { _, isChecked ->
                     onFullscreenChanged.invoke(isChecked)
+                }
+            }
+        }
+    }
+}
+
+internal fun MaterialPopupMenuBuilder.addConfirmItems(
+    context: Context,
+    action: ConfirmAction,
+    onNagIntervalSeconds: (Int) -> Unit,
+    onContent: (String) -> Unit,
+) {
+    section {
+        item {
+            label = context.getString(RBase.string.voice_content_title)
+            callback = {
+                // Confirm has no legacy content, so it always uses the modern {variable}
+                // editor Voice's "new variables" mode also writes to (content2) — see
+                // TimerMachineHelper.generateVoiceContent, which only understands
+                // {variable}-style tokens through content2, not the legacy $variable
+                // tokens content supports.
+                VoiceVariableDialog(context).show(
+                    initialAction = VoiceAction(
+                        content2 = action.content.ifBlank { ConfirmAction.DEFAULT_CONTENT }
+                    ),
+                    onGet = onContent,
+                    onGet2 = onContent,
+                )
+            }
+        }
+        item {
+            label = "${context.getString(RBase.string.confirm_nag_interval)}: ${action.nagIntervalSeconds}"
+            callback = {
+                SimpleInputDialog(context).show(
+                    titleRes = RBase.string.confirm_nag_interval,
+                    preFill = action.nagIntervalSeconds.toString(),
+                    inputType = InputType.TYPE_CLASS_NUMBER,
+                    message = buildSpannedString {
+                        val gapWidth = context.dimen(RBase.dimen.bullet_span_gap_width)
+                        append(
+                            context.getString(RBase.string.confirm_nag_interval_desp_usage),
+                            BulletSpan(gapWidth),
+                            Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                        )
+                        appendLine()
+                        append(
+                            context.getString(RBase.string.confirm_nag_interval_desp_0_meaning),
+                            BulletSpan(gapWidth),
+                            Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                        )
+                    },
+                ) {
+                    onNagIntervalSeconds.invoke(it.toIntOrNull() ?: 0)
                 }
             }
         }
