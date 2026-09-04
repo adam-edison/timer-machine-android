@@ -20,7 +20,7 @@ use only (see licensing note at the bottom).
 - [ ] [11. Proactive, offline-capable TTS pre-baking](#11-proactive-offline-capable-tts-pre-baking)
 - [ ] [12. Self-hosted high-quality TTS voice](#12-self-hosted-high-quality-tts-voice)
 - [ ] [13. Sound sequencing across behaviors on one step](#13-sound-sequencing-across-behaviors-on-one-step)
-- [ ] [14. Tags — replace folders with tags, filtering, and saved searches](#14-tags--replace-folders-with-tags-filtering-and-saved-searches)
+- [ ] [14. Tags — additional to folders, with filtering and saved searches](#14-tags--additional-to-folders-with-filtering-and-saved-searches)
 
 Check a box and flip its section's `Status:` line to `done` in the same commit
 that merges the feature branch into `personal`.
@@ -847,14 +847,14 @@ Revisit once the higher-priority items above are done.
 
 **Manual test:** _(fill in after building)_
 
-## 14. Tags — replace folders with tags, filtering, and saved searches
+## 14. Tags — additional to folders, with filtering and saved searches
 
 Branch: `feat/timer-tags`
 
-**What:** folders are a single-parent hierarchy — a timer lives in exactly
-one place. Tags are multi-label instead: a timer can carry several (e.g.
-`strength`, `cardio`, `low-energy`, `15-min`), filtered by any combination,
-stacked with item 7's name search. The payoff: entire routines and
+**What:** folders stay exactly as they are — tags are additional, not a
+replacement. A timer keeps its one folder, and separately can carry several
+tags (e.g. `strength`, `cardio`, `low-energy`, `15-min`), filtered by any
+combination, stacked with item 7's name search. The payoff: entire routines and
 progressions (see item 9) can be planned and assembled by mood or fitness
 level — pick from a saved filter instead of remembering which folder
 something lives in or rebuilding a list by hand each time. Tags also give
@@ -876,14 +876,14 @@ not a guess at what text to search for.
 - Saved searches: a small new entity (name + selected tags + optional text
   query), listed somewhere reachable in one tap, so a routine like "Low
   Energy Strength" is a single tap instead of re-picking filters each time.
-- Whether folders get removed outright or kept alongside tags (e.g. as a
-  coarser top-level grouping, tags for everything finer) is an open
-  question — worth resolving before starting, since folders are used
-  elsewhere in the app (backup/export, the timer list's own navigation).
+- Folders are untouched — still the one-parent grouping they are today,
+  everywhere they're already used (backup/export, the timer list's own
+  navigation). Tags are a second, independent, multi-label axis on top —
+  filtering by tag searches across folders, not within the current one.
 - Item 6's search extends to filter by tag, not just free text over
   timer/step name.
 
-**Touches:** _(sketch out once storage/folder questions above are settled)_
+**Touches:** _(sketch out once the storage question above is settled)_
 likely `TimerEntity`/`TimerMoreEntity` (tag list) · new saved-search entity
 + DAO · timer list UI (chip filter row) · item 6's search screen (tag
 filter alongside text) · item 7's search (tag-aware).
