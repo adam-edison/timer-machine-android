@@ -6,11 +6,12 @@ import xyz.aprildown.timer.domain.entities.TimerEntity
 import xyz.aprildown.timer.domain.entities.toConfirmAction
 import xyz.aprildown.timer.domain.entities.toCountAction
 import xyz.aprildown.timer.domain.entities.toHalfAction
-import xyz.aprildown.timer.presentation.stream.task.ConfirmTask
+import xyz.aprildown.timer.domain.entities.toQrScanAction
 import xyz.aprildown.timer.presentation.stream.task.CountDownTimerTask
 import xyz.aprildown.timer.presentation.stream.task.StopwatchTask
 import xyz.aprildown.timer.presentation.stream.task.Task
 import xyz.aprildown.timer.presentation.stream.task.TaskManager
+import xyz.aprildown.timer.presentation.stream.task.TerminalWaitTask
 import xyz.aprildown.timer.presentation.stream.task.TickListener
 
 internal class TimerMachine(
@@ -34,7 +35,12 @@ internal class TimerMachine(
         fun beep()
         fun notifyHalf(halfOption: Int)
         fun countRead(content: String)
-        fun confirmAlert(timerId: Int, index: TimerIndex)
+
+        /**
+         * Called when a CONFIRM or QR_SCAN step's terminal wait begins, and again on every
+         * nag interval while it continues to wait.
+         */
+        fun terminalWaitAlert(timerId: Int, index: TimerIndex)
     }
 
     private val timerId = timer.id
@@ -142,23 +148,29 @@ internal class TimerMachine(
     private fun StepEntity.Step.toTask(useTtsNextStep: Boolean = false): Task {
         val behaviour = behaviour
         val countUp = behaviour.find { it.type == BehaviourType.HALT } != null
-        val confirmBehaviour = behaviour.find { it.type == BehaviourType.CONFIRM }
+        val terminalWaitBehaviour = behaviour.find {
+            it.type == BehaviourType.CONFIRM || it.type == BehaviourType.QR_SCAN
+        }
 
         val task = when {
-            confirmBehaviour != null -> {
-                val action = confirmBehaviour.toConfirmAction()
-                ConfirmTask(
+            terminalWaitBehaviour != null -> {
+                val nagIntervalSeconds = when (terminalWaitBehaviour.type) {
+                    BehaviourType.CONFIRM -> terminalWaitBehaviour.toConfirmAction().nagIntervalSeconds
+                    BehaviourType.QR_SCAN -> terminalWaitBehaviour.toQrScanAction().nagIntervalSeconds
+                    else -> error("Unreachable: $terminalWaitBehaviour")
+                }
+                TerminalWaitTask(
                     master = this@TimerMachine,
                     countDownTime = length,
-                    onConfirmTick = { elapsedMillis ->
+                    onWaitTick = { elapsedMillis ->
                         val elapsedSeconds = elapsedMillis / 1000
                         val shouldAlert = elapsedSeconds == 0L ||
                             (
-                                action.nagIntervalSeconds > 0 &&
-                                    elapsedSeconds % action.nagIntervalSeconds == 0L
+                                nagIntervalSeconds > 0 &&
+                                    elapsedSeconds % nagIntervalSeconds == 0L
                                 )
                         if (shouldAlert) {
-                            listener.confirmAlert(timerId, currentIndex)
+                            listener.terminalWaitAlert(timerId, currentIndex)
                         }
                     },
                 )

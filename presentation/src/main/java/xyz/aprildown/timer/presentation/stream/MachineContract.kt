@@ -117,6 +117,12 @@ interface MachineContract {
         fun moveTimer(timerId: Int, index: TimerIndex)
         fun decreTimer(timerId: Int)
         fun increTimer(timerId: Int)
+
+        /**
+         * Moves off a QR_SCAN step after a successful scan, bypassing the block that
+         * [moveTimer]/[decreTimer]/[increTimer] apply while that step is active.
+         */
+        fun advancePastQrScan(timerId: Int)
         fun resetTimer(timerId: Int)
         fun adjustAmount(timerId: Int, amount: Long, goBackOnNotifier: Boolean)
 

@@ -16,5 +16,8 @@ internal data class BehaviourData(
     val content: String = "",
 
     @Json(name = "loop")
-    val loop: Boolean = true
+    val loop: Boolean = true,
+
+    @Json(name = "extra")
+    val extra: String = ""
 )

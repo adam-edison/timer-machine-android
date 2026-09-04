@@ -69,12 +69,18 @@ class EditableBehaviourLayout(
 
     /**
      * Behaviour types that claim the step's terminal timing (what happens when the step's
-     * countdown ends) and so can't be combined on the same step.
+     * countdown ends) and so can't be combined with each other on the same step.
      */
-    private val mutuallyExclusiveBehaviourTypes = mapOf(
-        BehaviourType.HALT to BehaviourType.CONFIRM,
-        BehaviourType.CONFIRM to BehaviourType.HALT,
+    private val terminalTimingBehaviourTypes = setOf(
+        BehaviourType.HALT,
+        BehaviourType.CONFIRM,
+        BehaviourType.QR_SCAN,
     )
+
+    private val mutuallyExclusiveBehaviourTypes: Map<BehaviourType, Set<BehaviourType>> =
+        terminalTimingBehaviourTypes.associateWith { type ->
+            terminalTimingBehaviourTypes - type
+        }
 
     init {
         flexWrap = FlexWrap.WRAP
@@ -84,7 +90,8 @@ class EditableBehaviourLayout(
         binding.btnBehaviourAdd.setOnClickListener { view ->
             val currentTypes = data.keys
             val showTypes = enabledBehaviourTypes.filter { type ->
-                type !in currentTypes && mutuallyExclusiveBehaviourTypes[type] !in currentTypes
+                type !in currentTypes &&
+                    mutuallyExclusiveBehaviourTypes[type].orEmpty().none { it in currentTypes }
             }
             if (showTypes.isNotEmpty()) {
                 popupMenu {

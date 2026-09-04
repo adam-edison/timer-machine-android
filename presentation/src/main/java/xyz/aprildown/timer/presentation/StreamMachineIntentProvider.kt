@@ -9,6 +9,7 @@ interface StreamMachineIntentProvider {
     fun pauseIntent(id: Int): Intent
     fun decreIntent(id: Int): Intent
     fun increIntent(id: Int): Intent
+    fun qrScanSuccessIntent(id: Int): Intent
     fun moveIntent(id: Int, index: TimerIndex): Intent
     fun resetIntent(id: Int): Intent
     fun adjustTimeIntent(id: Int, amount: Long): Intent

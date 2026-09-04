@@ -14,6 +14,7 @@ import xyz.aprildown.timer.domain.entities.BehaviourType
 import xyz.aprildown.timer.domain.entities.ConfirmAction
 import xyz.aprildown.timer.domain.entities.FolderEntity
 import xyz.aprildown.timer.domain.entities.HalfAction
+import xyz.aprildown.timer.domain.entities.QrScanAction
 import xyz.aprildown.timer.domain.entities.StepType
 import xyz.aprildown.timer.domain.entities.TimerEntity
 import xyz.aprildown.timer.domain.entities.TimerStampEntity
@@ -25,6 +26,7 @@ import xyz.aprildown.timer.domain.entities.toCountAction
 import xyz.aprildown.timer.domain.entities.toFlashlightAction
 import xyz.aprildown.timer.domain.entities.toMusicAction
 import xyz.aprildown.timer.domain.entities.toNotificationAction
+import xyz.aprildown.timer.domain.entities.toQrScanAction
 import xyz.aprildown.timer.domain.entities.toScreenAction
 import xyz.aprildown.timer.domain.entities.toVibrationAction
 import xyz.aprildown.timer.domain.entities.toVoiceAction
@@ -154,8 +156,35 @@ class MachinePresenter @Inject constructor(
         timers[timerId]?.machine?.pause()
     }
 
+    /**
+     * True while the timer's currently active step carries QR_SCAN — the step holds
+     * indefinitely once its countdown ends, and only a successful scan
+     * ([advancePastQrScan]) may move off it. Applies to the whole step (not just its
+     * post-countdown wait), so "Next"/"Previous"/jump-to-step are all blocked, closing
+     * the running screen's step-list jump as a bypass, not only the Next action.
+     */
+    private fun isCurrentStepQrLocked(timerId: Int): Boolean {
+        val (timer, machine) = timers[timerId] ?: return false
+        val step = timer.getStep(machine.currentIndex) ?: return false
+        return step.behaviour.any { it.type == BehaviourType.QR_SCAN }
+    }
+
     override fun moveTimer(timerId: Int, index: TimerIndex) {
+        if (isCurrentStepQrLocked(timerId)) return
         timers[timerId]?.machine?.toIndex(index)
+    }
+
+    override fun advancePastQrScan(timerId: Int) {
+        timers[timerId]?.run {
+            val current = machine.currentIndex
+            if (current == timer.getLastIndex()) {
+                resetTimer(timerId)
+            } else {
+                val (index, _) =
+                    getNextIndexWithStep(timer.steps, timer.loop, machine.currentIndex)
+                machine.toIndex(index)
+            }
+        }
     }
 
     override fun decreTimer(timerId: Int) {
@@ -637,7 +666,7 @@ class MachinePresenter @Inject constructor(
         view?.beginReading(content = content, sayMore = true)
     }
 
-    override fun confirmAlert(timerId: Int, index: TimerIndex) {
+    override fun terminalWaitAlert(timerId: Int, index: TimerIndex) {
         val timer = timers[timerId]?.timer ?: return
         val currentStep = timer.getStep(index) ?: return
         val stepBehaviours = currentStep.behaviour
@@ -646,7 +675,7 @@ class MachinePresenter @Inject constructor(
             val action = behavior.toBeepAction()
             // enableTone only arms the Beeper; playTone is what actually makes a sound
             // (on a normal countdown, the per-second BeepTickListener calls playTone
-            // on every tick — there's no such ticking during the confirm wait, so a
+            // on every tick — there's no such ticking during the terminal wait, so a
             // single explicit beep pulse per nag stands in for that here).
             view?.enableTone(
                 tone = action.soundIndex,
@@ -660,6 +689,20 @@ class MachinePresenter @Inject constructor(
             val action = behavior.toConfirmAction()
             view?.beginReading(
                 content = VoiceAction(content2 = action.content.ifBlank { ConfirmAction.DEFAULT_CONTENT })
+                    .generateVoiceContent(
+                        timer = timer,
+                        currentStep = currentStep,
+                        index = index,
+                        timeFormatter = viewTimeFormatter(),
+                    ),
+                sayMore = false,
+            )
+        }
+
+        stepBehaviours.find { it.type == BehaviourType.QR_SCAN }?.let { behavior ->
+            val action = behavior.toQrScanAction()
+            view?.beginReading(
+                content = VoiceAction(content2 = action.content.ifBlank { QrScanAction.DEFAULT_CONTENT })
                     .generateVoiceContent(
                         timer = timer,
                         currentStep = currentStep,

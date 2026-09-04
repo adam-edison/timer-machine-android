@@ -5,27 +5,29 @@ import com.github.deweyreed.tools.helper.HandlerHelper
 
 /**
  * Counts down [countDownTime] like [CountDownTimerTask]. Once it reaches zero, instead of
- * finishing (which would advance to the next step), it switches into an indefinite
- * confirm-wait phase like [StopwatchTask], calling [onConfirmTick] once a second from that
- * point (starting at 0) instead of the regular per-second [TickListener]s.
- * You must call [TaskManager.interfere] to move on from the confirm-wait phase.
+ * finishing (which would advance to the next step), it switches into an indefinite wait
+ * phase like [StopwatchTask], calling [onWaitTick] once a second from that point (starting
+ * at 0) instead of the regular per-second [TickListener]s.
+ * You must call [TaskManager.interfere] to move on from the wait phase — used by both
+ * CONFIRM (any "Next" dismisses it) and QR_SCAN (only a successful scan dismisses it); this
+ * task has no opinion on how that happens.
  */
-internal class ConfirmTask(
+internal class TerminalWaitTask(
     master: TaskMaster,
     countDownTime: Long,
-    private val onConfirmTick: (elapsedMillis: Long) -> Unit,
+    private val onWaitTick: (elapsedMillis: Long) -> Unit,
 ) : Task(master) {
 
-    private var isConfirming = false
+    private var isWaiting = false
 
     private var millisLeft = countDownTime
-    private var confirmMillisPassedBase = 0L
-    private var confirmMillisPassedCurrent = 0L
+    private var waitMillisPassedBase = 0L
+    private var waitMillisPassedCurrent = 0L
 
     private var timer: AccurateCountDownTimer = CountDownPhaseTimer(millisLeft)
 
     override val currentTime: Long
-        get() = if (isConfirming) confirmMillisPassedBase + confirmMillisPassedCurrent else millisLeft
+        get() = if (isWaiting) waitMillisPassedBase + waitMillisPassedCurrent else millisLeft
 
     override fun start() {
         super.start()
@@ -35,10 +37,10 @@ internal class ConfirmTask(
     override fun pause() {
         super.pause()
         timer.cancel()
-        timer = if (isConfirming) {
-            confirmMillisPassedBase += confirmMillisPassedCurrent
-            confirmMillisPassedCurrent = 0L
-            ConfirmPhaseTimer()
+        timer = if (isWaiting) {
+            waitMillisPassedBase += waitMillisPassedCurrent
+            waitMillisPassedCurrent = 0L
+            WaitPhaseTimer()
         } else {
             CountDownPhaseTimer(millisLeft)
         }
@@ -50,7 +52,7 @@ internal class ConfirmTask(
     }
 
     override fun adjust(amount: Long, add: Boolean) {
-        if (isConfirming) return
+        if (isWaiting) return
         timer.cancel()
         millisLeft = if (add) millisLeft + amount else amount
         timer = CountDownPhaseTimer(millisLeft)
@@ -65,18 +67,18 @@ internal class ConfirmTask(
         tick()
     }
 
-    private fun beginConfirming() {
-        isConfirming = true
-        confirmMillisPassedBase = 0L
-        confirmMillisPassedCurrent = 0L
-        timer = ConfirmPhaseTimer()
+    private fun beginWaiting() {
+        isWaiting = true
+        waitMillisPassedBase = 0L
+        waitMillisPassedCurrent = 0L
+        timer = WaitPhaseTimer()
         timer.start()
     }
 
-    private fun onConfirmPhaseTick(millisPassed: Long) {
-        confirmMillisPassedCurrent = millisPassed
+    private fun onWaitPhaseTick(millisPassed: Long) {
+        waitMillisPassedCurrent = millisPassed
         master.onTick(this, currentTime)
-        onConfirmTick(currentTime)
+        onWaitTick(currentTime)
     }
 
     private inner class CountDownPhaseTimer(
@@ -85,42 +87,42 @@ internal class ConfirmTask(
 
         init {
             HandlerHelper.runOnUiThread {
-                this@ConfirmTask.onCountDownTick(countDownTime)
+                this@TerminalWaitTask.onCountDownTick(countDownTime)
             }
         }
 
         override fun onFinish() {
             HandlerHelper.runOnUiThread {
-                this@ConfirmTask.onCountDownTick(0L)
-                this@ConfirmTask.beginConfirming()
+                this@TerminalWaitTask.onCountDownTick(0L)
+                this@TerminalWaitTask.beginWaiting()
             }
         }
 
         override fun onTick(millisUntilFinished: Long) {
             HandlerHelper.runOnUiThread {
-                this@ConfirmTask.onCountDownTick(millisUntilFinished.round())
+                this@TerminalWaitTask.onCountDownTick(millisUntilFinished.round())
             }
         }
     }
 
-    private inner class ConfirmPhaseTimer : AccurateCountDownTimer(CONFIRM_DURATION, 1_000L) {
+    private inner class WaitPhaseTimer : AccurateCountDownTimer(WAIT_DURATION, 1_000L) {
 
         init {
             HandlerHelper.runOnUiThread {
-                this@ConfirmTask.onConfirmPhaseTick(0L)
+                this@TerminalWaitTask.onWaitPhaseTick(0L)
             }
         }
 
         override fun onFinish() {
-            // Unreachable: CONFIRM_DURATION is effectively unbounded.
+            // Unreachable: WAIT_DURATION is effectively unbounded.
         }
 
         override fun onTick(millisUntilFinished: Long) {
             HandlerHelper.runOnUiThread {
-                this@ConfirmTask.onConfirmPhaseTick((CONFIRM_DURATION - millisUntilFinished).round())
+                this@TerminalWaitTask.onWaitPhaseTick((WAIT_DURATION - millisUntilFinished).round())
             }
         }
     }
 }
 
-private const val CONFIRM_DURATION = Long.MAX_VALUE
+private const val WAIT_DURATION = Long.MAX_VALUE

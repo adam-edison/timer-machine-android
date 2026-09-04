@@ -155,7 +155,10 @@ internal fun Context.buildTimerNotificationBuilder(
     appNavigator: AppNavigator,
     timer: TimerEntity,
     state: StreamState,
-    currentStepName: String
+    currentStepName: String,
+    // Omit the "Next" action entirely rather than show one that silently no-ops: a QR_SCAN
+    // step can only be advanced by scanning, which a notification tap can't do on its own.
+    isQrLocked: Boolean = false,
 ): Builder {
     val res = resources
     val timerId = timer.id
@@ -200,13 +203,15 @@ internal fun Context.buildTimerNotificationBuilder(
             )
         )
     }
-    actions.add(
-        Action(
-            RBase.drawable.ic_arrow_down,
-            res.getString(RBase.string.next),
-            pendingServiceIntent(MachineService.increTimingIntent(this, timer.id), timerId)
+    if (!isQrLocked) {
+        actions.add(
+            Action(
+                RBase.drawable.ic_arrow_down,
+                res.getString(RBase.string.next),
+                pendingServiceIntent(MachineService.increTimingIntent(this, timer.id), timerId)
+            )
         )
-    )
+    }
 
     val showTimerIntent = appNavigator.getOneIntent(timerId = timerId, inNewTask = true)
 

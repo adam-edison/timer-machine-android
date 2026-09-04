@@ -19,5 +19,6 @@ dependencies {
     implementation(libs.scrollHmsPicker)
     implementation(libs.coil)
     implementation(libs.zoomable)
+    implementation(libs.mlkit.codeScanner)
 
 }

@@ -23,6 +23,7 @@ import xyz.aprildown.timer.app.base.utils.produceTime
 import xyz.aprildown.timer.app.timer.edit.databinding.DialogUpdateStepBinding
 import xyz.aprildown.timer.app.timer.edit.databinding.ItemEditStepBinding
 import xyz.aprildown.timer.component.key.DurationPicker
+import xyz.aprildown.timer.component.key.QrCodeScanner
 import xyz.aprildown.timer.component.key.behaviour.EditableBehaviourLayout
 import xyz.aprildown.timer.domain.entities.BehaviourEntity
 import xyz.aprildown.timer.domain.entities.BehaviourType
@@ -35,6 +36,7 @@ import xyz.aprildown.timer.domain.entities.toHalfAction
 import xyz.aprildown.timer.domain.entities.toImageAction
 import xyz.aprildown.timer.domain.entities.toMusicAction
 import xyz.aprildown.timer.domain.entities.toNotificationAction
+import xyz.aprildown.timer.domain.entities.toQrScanAction
 import xyz.aprildown.timer.domain.entities.toScreenAction
 import xyz.aprildown.timer.domain.entities.toSkipAction
 import xyz.aprildown.timer.domain.entities.toVibrationAction
@@ -277,6 +279,40 @@ class UpdateStepDialog :
                                 it.toConfirmAction().copy(content = newContent).toBehaviourEntity()
                             }
                         }
+                    )
+                }
+                BehaviourType.QR_SCAN -> {
+                    addQrScanItems(
+                        context = context,
+                        action = current.toQrScanAction(),
+                        onNagIntervalSeconds = { newInterval ->
+                            changeBehaviour(BehaviourType.QR_SCAN) {
+                                it.toQrScanAction().copy(nagIntervalSeconds = newInterval)
+                                    .toBehaviourEntity()
+                            }
+                        },
+                        onContent = { newContent ->
+                            changeBehaviour(BehaviourType.QR_SCAN) {
+                                it.toQrScanAction().copy(content = newContent).toBehaviourEntity()
+                            }
+                        },
+                        onScanToSetSavedCode = {
+                            QrCodeScanner.scan(
+                                activity = requireActivity(),
+                                onSuccess = { code ->
+                                    changeBehaviour(BehaviourType.QR_SCAN) {
+                                        it.toQrScanAction().copy(savedCode = code).toBehaviourEntity()
+                                    }
+                                    context.toast(getString(RBase.string.qr_scan_register_success))
+                                },
+                                onFailure = { error -> context.toast(error.message.toString()) },
+                            )
+                        },
+                        onClearSavedCode = {
+                            changeBehaviour(BehaviourType.QR_SCAN) {
+                                it.toQrScanAction().copy(savedCode = "").toBehaviourEntity()
+                            }
+                        },
                     )
                 }
                 BehaviourType.HALF -> {

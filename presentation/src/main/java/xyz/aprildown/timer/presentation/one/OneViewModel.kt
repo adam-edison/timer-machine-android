@@ -9,9 +9,12 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.launch
 import xyz.aprildown.timer.domain.di.MainDispatcher
+import xyz.aprildown.timer.domain.entities.BehaviourType
 import xyz.aprildown.timer.domain.entities.FolderEntity
 import xyz.aprildown.timer.domain.entities.StepEntity
 import xyz.aprildown.timer.domain.entities.TimerEntity
+import xyz.aprildown.timer.domain.entities.matches
+import xyz.aprildown.timer.domain.entities.toQrScanAction
 import xyz.aprildown.timer.domain.usecases.timer.FindTimerInfo
 import xyz.aprildown.timer.domain.usecases.timer.GetTimer
 import xyz.aprildown.timer.domain.usecases.timer.SaveTimer
@@ -257,6 +260,25 @@ class OneViewModel @Inject constructor(
 
     private fun showUiLockedMsg() {
         messageEvent.value = Event(R.string.one_ui_locked)
+    }
+
+    fun isCurrentStepQrLocked(): Boolean {
+        val index = timerCurrentIndex.value ?: return false
+        val step = timer.value?.getStep(index) ?: return false
+        return step.behaviour.any { it.type == BehaviourType.QR_SCAN }
+    }
+
+    fun onQrScanResult(scannedCode: String) {
+        val index = timerCurrentIndex.value ?: return
+        val action = timer.value?.getStep(index)?.behaviour
+            ?.find { it.type == BehaviourType.QR_SCAN }
+            ?.toQrScanAction()
+            ?: return
+        if (action.matches(scannedCode)) {
+            _intentEvent.value = Event(streamMachineIntentProvider.qrScanSuccessIntent(timerId))
+        } else {
+            messageEvent.value = Event(R.string.qr_scan_wrong_code)
+        }
     }
 
     private fun setTimerItem(

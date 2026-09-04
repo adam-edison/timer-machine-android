@@ -13,6 +13,10 @@ package xyz.aprildown.timer.domain.entities
  * CONFIRM:
  *     str1: nag interval in seconds, 0 or "" to replay its TTS/beep only once when confirmation is needed
  *     str2: spoken content, "" for the default "Did you finish {step_name}?"
+ * QR_SCAN:
+ *     str1: nag interval in seconds, 0 or "" to replay its TTS/beep only once when a scan is needed
+ *     str2: spoken content, "" for the default "Scan the code to finish {step_name}"
+ *     str3: the required QR code content, "" to accept any scanned code
  * VOICE:
  *     str1: speak content
  * BEEP:
@@ -33,7 +37,7 @@ package xyz.aprildown.timer.domain.entities
  *     str1: The loops
  */
 enum class BehaviourType {
-    MUSIC, VIBRATION, SCREEN, VOICE, HALT, SKIP, BEEP, HALF, COUNT, NOTIFICATION, FLASHLIGHT, IMAGE, CONFIRM;
+    MUSIC, VIBRATION, SCREEN, VOICE, HALT, SKIP, BEEP, HALF, COUNT, NOTIFICATION, FLASHLIGHT, IMAGE, CONFIRM, QR_SCAN;
 
     val hasBoolValue: Boolean
         get() = this == MUSIC || this == BEEP
@@ -49,7 +53,9 @@ data class BehaviourEntity(
     val type: BehaviourType,
     val str1: String = "",
     val str2: String = "",
-    val bool: Boolean = true
+    val bool: Boolean = true,
+    // A third generic string column, for behaviour types that need more than str1/str2.
+    val str3: String = ""
 )
 
 private interface Action {
@@ -185,6 +191,43 @@ fun BehaviourEntity.toConfirmAction(): ConfirmAction {
 }
 
 // endregion Confirm
+
+// region QrScan
+
+data class QrScanAction(
+    val nagIntervalSeconds: Int = 0,
+    val content: String = "",
+    // "" accepts any scanned code as a match.
+    val savedCode: String = "",
+) : Action {
+    override fun toBehaviourEntity(): BehaviourEntity {
+        return BehaviourEntity(
+            BehaviourType.QR_SCAN,
+            str1 = if (nagIntervalSeconds <= 0) "" else nagIntervalSeconds.toString(),
+            str2 = content,
+            str3 = savedCode,
+        )
+    }
+
+    companion object {
+        const val DEFAULT_CONTENT = "Scan the code to finish ${VoiceAction.VARIABLE_STEP_NAME}"
+    }
+}
+
+fun BehaviourEntity.toQrScanAction(): QrScanAction {
+    require(type == BehaviourType.QR_SCAN)
+    return QrScanAction(
+        nagIntervalSeconds = str1.toIntOrNull() ?: 0,
+        content = str2,
+        savedCode = str3,
+    )
+}
+
+fun QrScanAction.matches(scannedCode: String): Boolean {
+    return savedCode.isBlank() || savedCode == scannedCode
+}
+
+// endregion QrScan
 
 // region Voice
 

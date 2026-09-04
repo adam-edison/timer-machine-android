@@ -167,6 +167,7 @@ coil-gif = "io.coil-kt.coil3:coil-gif:3.4.0"
 zoomable = "me.saket.telephoto:zoomable:0.19.0"
 twoWayNestedScrollView = "com.github.ultimate-deej:twowaynestedscrollview:0.1.2"
 accurateCountDownTimer = "com.github.cardinalby:accurate-count-down-timer:1.0"
+mlkit-codeScanner = "com.google.android.gms:play-services-code-scanner:16.1.0"
 aboutLibraries = { module = "com.mikepenz:aboutlibraries-compose-m3", version.ref = "aboutLibraries" }
 
 [bundles]

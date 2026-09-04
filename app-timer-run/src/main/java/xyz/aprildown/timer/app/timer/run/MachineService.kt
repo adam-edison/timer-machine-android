@@ -122,6 +122,7 @@ class MachineService :
             }
             ACTION_DECRE -> presenter.decreTimer(timerId)
             ACTION_INCRE -> presenter.increTimer(timerId)
+            ACTION_QR_SCAN_SUCCESS -> presenter.advancePastQrScan(timerId)
             ACTION_RESET -> presenter.resetTimer(timerId)
             ACTION_ADJUST_AMOUNT -> presenter.adjustAmount(
                 timerId,
@@ -496,6 +497,7 @@ class MachineService :
         private const val ACTION_MOVE = "${ACTION_PREFIX}_MOVE"
         private const val ACTION_DECRE = "${ACTION_PREFIX}_DECRE"
         private const val ACTION_INCRE = "${ACTION_PREFIX}_INCRE"
+        private const val ACTION_QR_SCAN_SUCCESS = "${ACTION_PREFIX}_QR_SCAN_SUCCESS"
         private const val ACTION_RESET = "${ACTION_PREFIX}_RESET"
         private const val ACTION_ADJUST_AMOUNT = "${ACTION_PREFIX}_ADJUST_AMOUNT"
 
@@ -536,6 +538,10 @@ class MachineService :
 
         fun increTimingIntent(context: Context, itemId: Int): Intent =
             pureIntent(context).setAction(ACTION_INCRE)
+                .putExtra(EXTRA_TIMER_ID, itemId)
+
+        fun qrScanSuccessIntent(context: Context, itemId: Int): Intent =
+            pureIntent(context).setAction(ACTION_QR_SCAN_SUCCESS)
                 .putExtra(EXTRA_TIMER_ID, itemId)
 
         fun moveTimingIntent(context: Context, itemId: Int, index: TimerIndex): Intent =

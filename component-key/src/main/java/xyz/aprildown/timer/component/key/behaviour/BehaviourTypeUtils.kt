@@ -21,6 +21,7 @@ val BehaviourType.iconRes: Int
         BehaviourType.IMAGE -> RBase.drawable.ic_image
         BehaviourType.SKIP -> RBase.drawable.ic_skip
         BehaviourType.CONFIRM -> RBase.drawable.ic_check
+        BehaviourType.QR_SCAN -> RBase.drawable.ic_qr_code
     }
 
 val BehaviourType.nameRes: Int
@@ -39,6 +40,7 @@ val BehaviourType.nameRes: Int
         BehaviourType.IMAGE -> RBase.string.behaviour_image
         BehaviourType.SKIP -> RBase.string.behaviour_skip
         BehaviourType.CONFIRM -> RBase.string.behaviour_confirm
+        BehaviourType.QR_SCAN -> RBase.string.behaviour_qr_scan
     }
 
 val BehaviourType.despRes: Int
@@ -57,4 +59,5 @@ val BehaviourType.despRes: Int
         BehaviourType.IMAGE -> RBase.string.behaviour_image_help
         BehaviourType.SKIP -> RBase.string.behaviour_skip_help
         BehaviourType.CONFIRM -> RBase.string.behaviour_confirm_help
+        BehaviourType.QR_SCAN -> RBase.string.behaviour_qr_scan_help
     }

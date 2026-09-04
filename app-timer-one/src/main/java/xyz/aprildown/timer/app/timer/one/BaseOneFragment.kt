@@ -45,6 +45,7 @@ import xyz.aprildown.timer.app.base.utils.ShortcutHelper
 import xyz.aprildown.timer.app.timer.one.float.FloatingTimer
 import xyz.aprildown.timer.component.key.DurationPicker
 import xyz.aprildown.timer.component.key.ListItemWithLayout
+import xyz.aprildown.timer.component.key.QrCodeScanner
 import xyz.aprildown.timer.component.key.SimpleInputDialog
 import xyz.aprildown.timer.domain.utils.AppTracker
 import xyz.aprildown.timer.presentation.one.OneViewModel
@@ -213,6 +214,14 @@ abstract class BaseOneFragment<T : ViewBinding>(
     }
 
     protected fun actionNextStep() {
+        if (viewModel.isCurrentStepQrLocked()) {
+            QrCodeScanner.scan(
+                activity = requireActivity(),
+                onSuccess = { code -> viewModel.onQrScanResult(code) },
+                onFailure = { error -> requireContext().toast(error.message.toString()) },
+            )
+            return
+        }
         viewModel.onMove(1)
     }
 

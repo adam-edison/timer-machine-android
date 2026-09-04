@@ -60,6 +60,10 @@ abstract class OtherModule {
                     return MachineService.increTimingIntent(context, id)
                 }
 
+                override fun qrScanSuccessIntent(id: Int): Intent {
+                    return MachineService.qrScanSuccessIntent(context, id)
+                }
+
                 override fun moveIntent(id: Int, index: TimerIndex): Intent {
                     return MachineService.moveTimingIntent(context, id, index)
                 }
