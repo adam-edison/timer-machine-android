@@ -69,7 +69,10 @@ class EditableBehaviourLayout(
 
     /**
      * Behaviour types that claim the step's terminal timing (what happens when the step's
-     * countdown ends) and so can't be combined on the same step.
+     * countdown ends) and so can't be combined on the same step. QR_SCAN is deliberately not
+     * here — it's an orthogonal "how do you leave this step" gate, combinable with either:
+     * HALT holds instantly, CONFIRM counts down then holds with its own alert/nag, and
+     * either way QR_SCAN just requires a scan (instead of "Next") to leave the hold.
      */
     private val mutuallyExclusiveBehaviourTypes = mapOf(
         BehaviourType.HALT to BehaviourType.CONFIRM,

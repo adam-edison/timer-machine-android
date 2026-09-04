@@ -13,6 +13,7 @@ import xyz.aprildown.timer.domain.entities.toCountAction
 import xyz.aprildown.timer.domain.entities.toHalfAction
 import xyz.aprildown.timer.domain.entities.toMusicAction
 import xyz.aprildown.timer.domain.entities.toNotificationAction
+import xyz.aprildown.timer.domain.entities.toQrScanAction
 import xyz.aprildown.timer.domain.entities.toSkipAction
 import xyz.aprildown.timer.domain.entities.toVibrationAction
 import xyz.aprildown.timer.domain.entities.toVoiceAction
@@ -54,6 +55,20 @@ internal fun BehaviourEntity.getChipText(context: Context): String {
         BehaviourType.CONFIRM -> {
             val nagIntervalSeconds = toConfirmAction().nagIntervalSeconds
             if (nagIntervalSeconds > 0) "${getDefaultName()} $nagIntervalSeconds" else null
+        }
+        BehaviourType.QR_SCAN -> {
+            val action = toQrScanAction()
+            buildString {
+                append(getDefaultName())
+                if (action.savedCode.isNotBlank()) {
+                    append(" ")
+                    append(context.getString(RBase.string.qr_scan_saved_code_title))
+                }
+                if (action.emergencyExitSeconds > 0) {
+                    append(" ")
+                    append(action.emergencyExitSeconds)
+                }
+            }
         }
         BehaviourType.HALF -> {
             val option = toHalfAction().option

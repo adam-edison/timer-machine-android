@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.core.app.NotificationCompat.Builder
 import xyz.aprildown.timer.app.base.ui.AppNavigator
 import xyz.aprildown.timer.app.base.utils.produceTime
+import xyz.aprildown.timer.domain.entities.BehaviourType
 import xyz.aprildown.timer.domain.entities.TimerEntity
 import xyz.aprildown.timer.presentation.stream.StreamState
 import xyz.aprildown.timer.presentation.stream.TimerIndex
@@ -77,12 +78,14 @@ internal class TimerNotif(
     }
 
     override fun withStartEvent(b: Builder, index: TimerIndex): Builder {
-        currentTotalLength = timer.getStep(index)?.length ?: 0L
+        val step = timer.getStep(index)
+        currentTotalLength = step?.length ?: 0L
         return context.buildTimerNotificationBuilder(
             appNavigator = appNavigator,
             timer = timer,
             state = StreamState.RUNNING,
-            currentStepName = timer.getStep(index)?.label ?: ""
+            currentStepName = step?.label ?: "",
+            isQrLocked = step?.behaviour?.any { it.type == BehaviourType.QR_SCAN } == true,
         )
     }
 

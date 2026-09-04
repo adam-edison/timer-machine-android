@@ -7,4 +7,5 @@
     <item name="one_unable_to_start_timers_in_the_trash" type="string" />
     <item name="one_ui_locked" type="string" />
     <item name="half_content" type="string" />
+    <item name="qr_scan_wrong_code" type="string" />
 </resources>

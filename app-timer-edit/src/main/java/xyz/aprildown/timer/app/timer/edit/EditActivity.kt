@@ -54,6 +54,7 @@ import xyz.aprildown.timer.app.timer.edit.databinding.ActivityEditTimerBinding
 import xyz.aprildown.timer.app.timer.edit.media.ConditionDaysDialog
 import xyz.aprildown.timer.app.timer.edit.utils.SaveInstanceHelper
 import xyz.aprildown.timer.component.key.DurationPicker
+import xyz.aprildown.timer.component.key.QrCodeScanner
 import xyz.aprildown.timer.component.key.behaviour.EditableBehaviourLayout
 import xyz.aprildown.timer.domain.entities.BehaviourEntity
 import xyz.aprildown.timer.domain.entities.BehaviourType
@@ -69,6 +70,7 @@ import xyz.aprildown.timer.domain.entities.toHalfAction
 import xyz.aprildown.timer.domain.entities.toImageAction
 import xyz.aprildown.timer.domain.entities.toMusicAction
 import xyz.aprildown.timer.domain.entities.toNotificationAction
+import xyz.aprildown.timer.domain.entities.toQrScanAction
 import xyz.aprildown.timer.domain.entities.toScreenAction
 import xyz.aprildown.timer.domain.entities.toSkipAction
 import xyz.aprildown.timer.domain.entities.toVibrationAction
@@ -796,6 +798,35 @@ class EditActivity :
                                 it.toConfirmAction().copy(content = newContent).toBehaviourEntity()
                             }
                         }
+                    )
+                }
+                BehaviourType.QR_SCAN -> {
+                    addQrScanItems(
+                        context = this@EditActivity,
+                        action = current.toQrScanAction(),
+                        onScanToSetSavedCode = {
+                            QrCodeScanner.scan(
+                                activity = this@EditActivity,
+                                onSuccess = { code ->
+                                    changeBehaviour(BehaviourType.QR_SCAN, position) {
+                                        it.toQrScanAction().copy(savedCode = code).toBehaviourEntity()
+                                    }
+                                    toast(getString(RBase.string.qr_scan_register_success))
+                                },
+                                onFailure = { error -> toast(error.message.toString()) },
+                            )
+                        },
+                        onClearSavedCode = {
+                            changeBehaviour(BehaviourType.QR_SCAN, position) {
+                                it.toQrScanAction().copy(savedCode = "").toBehaviourEntity()
+                            }
+                        },
+                        onEmergencyExitSeconds = { newSeconds ->
+                            changeBehaviour(BehaviourType.QR_SCAN, position) {
+                                it.toQrScanAction().copy(emergencyExitSeconds = newSeconds)
+                                    .toBehaviourEntity()
+                            }
+                        },
                     )
                 }
                 BehaviourType.HALF -> {

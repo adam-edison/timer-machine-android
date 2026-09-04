@@ -14,6 +14,7 @@ import xyz.aprildown.timer.domain.entities.BehaviourType
 import xyz.aprildown.timer.domain.entities.ConfirmAction
 import xyz.aprildown.timer.domain.entities.FolderEntity
 import xyz.aprildown.timer.domain.entities.HalfAction
+import xyz.aprildown.timer.domain.entities.QrScanAction
 import xyz.aprildown.timer.domain.entities.StepType
 import xyz.aprildown.timer.domain.entities.TimerEntity
 import xyz.aprildown.timer.domain.entities.TimerStampEntity
@@ -25,6 +26,7 @@ import xyz.aprildown.timer.domain.entities.toCountAction
 import xyz.aprildown.timer.domain.entities.toFlashlightAction
 import xyz.aprildown.timer.domain.entities.toMusicAction
 import xyz.aprildown.timer.domain.entities.toNotificationAction
+import xyz.aprildown.timer.domain.entities.toQrScanAction
 import xyz.aprildown.timer.domain.entities.toScreenAction
 import xyz.aprildown.timer.domain.entities.toVibrationAction
 import xyz.aprildown.timer.domain.entities.toVoiceAction
@@ -36,6 +38,8 @@ import xyz.aprildown.timer.domain.utils.AppTracker
 import xyz.aprildown.timer.domain.utils.Constants
 import xyz.aprildown.timer.domain.utils.fireAndForget
 import xyz.aprildown.timer.presentation.R
+import xyz.aprildown.timer.presentation.stream.task.StopwatchTask
+import xyz.aprildown.timer.presentation.stream.task.TerminalWaitTask
 import javax.inject.Inject
 
 class MachinePresenter @Inject constructor(
@@ -85,7 +89,16 @@ class MachinePresenter @Inject constructor(
     }
 
     override fun addListener(timerId: Int, listener: TimerMachineListener) {
+        val hadNoListeners = listeners[timerId].isNullOrEmpty()
         listeners.getOrPut(timerId) { mutableListOf() }.add(listener)
+
+        // Someone's now watching a QR-locked step that had nobody watching when it started
+        // (that's the only situation launchQrScanScreen's notification gets posted for) —
+        // it's served its purpose, dismiss it rather than leaving it stuck since nothing
+        // else re-checks "is anyone watching" once a step is already under way.
+        if (hadNoListeners && isCurrentStepQrLocked(timerId)) {
+            view?.closeQrScanScreen()
+        }
     }
 
     override fun removeListener(timerId: Int, listener: TimerMachineListener) {
@@ -154,8 +167,71 @@ class MachinePresenter @Inject constructor(
         timers[timerId]?.machine?.pause()
     }
 
+    private fun currentQrScanAction(timerId: Int): QrScanAction? {
+        val (timer, machine) = timers[timerId] ?: return null
+        val step = timer.getStep(machine.currentIndex) ?: return null
+        return step.behaviour.find { it.type == BehaviourType.QR_SCAN }?.toQrScanAction()
+    }
+
+    // Elapsed time since the step's nominal end — null means still counting down (i.e.
+    // before the nominal end). A StopwatchTask's currentTime (a HALT step has no
+    // countdown, so its "nominal end" is immediate — currentTime already counts up from
+    // that point) is never null once the task exists, so HALT is never "still counting".
+    private fun elapsedMillisPastQrScanNominalEnd(timerId: Int): Long? {
+        return when (val task = timers[timerId]?.machine?.currentTask) {
+            is TerminalWaitTask -> task.elapsedSinceWaitBegan
+            is StopwatchTask -> task.currentTime
+            else -> null
+        }
+    }
+
+    /**
+     * True while the timer's currently active step carries QR_SCAN — the step holds
+     * indefinitely once its countdown ends, and only a successful scan
+     * ([advancePastQrScan]) may move off it, unless an emergency exit has elapsed.
+     * Applies to the whole step (not just its post-countdown wait), so
+     * "Next"/"Previous"/jump-to-step are all blocked, closing the running screen's
+     * step-list jump as a bypass, not only the Next action.
+     */
+    override fun isCurrentStepQrLocked(timerId: Int): Boolean {
+        val action = currentQrScanAction(timerId) ?: return false
+        if (action.emergencyExitSeconds <= 0) return true
+        val elapsedPastNominalEnd = elapsedMillisPastQrScanNominalEnd(timerId) ?: return true
+        return elapsedPastNominalEnd < action.emergencyExitSeconds * 1_000L
+    }
+
+    /**
+     * Seconds left until "Next" starts working again without a scan, or null if there's no
+     * QR_SCAN step active, no emergency exit configured for it, or it's already available.
+     */
+    override fun secondsUntilQrScanEmergencyExit(timerId: Int): Int? {
+        val action = currentQrScanAction(timerId) ?: return null
+        if (action.emergencyExitSeconds <= 0) return null
+        // null here (not yet past the step's nominal end) deliberately returns null too,
+        // not the full emergencyExitSeconds — a static, non-decreasing number shown for
+        // the whole initial countdown would look broken/stuck, not informative.
+        val elapsedPastNominalEnd = elapsedMillisPastQrScanNominalEnd(timerId) ?: return null
+        val remainingMillis = action.emergencyExitSeconds * 1_000L - elapsedPastNominalEnd
+        if (remainingMillis <= 0) return null
+        return (remainingMillis / 1_000L).toInt()
+    }
+
     override fun moveTimer(timerId: Int, index: TimerIndex) {
+        if (isCurrentStepQrLocked(timerId)) return
         timers[timerId]?.machine?.toIndex(index)
+    }
+
+    override fun advancePastQrScan(timerId: Int) {
+        timers[timerId]?.run {
+            val current = machine.currentIndex
+            if (current == timer.getLastIndex()) {
+                resetTimer(timerId)
+            } else {
+                val (index, _) =
+                    getNextIndexWithStep(timer.steps, timer.loop, machine.currentIndex)
+                machine.toIndex(index)
+            }
+        }
     }
 
     override fun decreTimer(timerId: Int) {
@@ -255,6 +331,7 @@ class MachinePresenter @Inject constructor(
             stopMusic()
             stopVibrating()
             closeScreen()
+            closeQrScanScreen()
             stopReading()
             disableTone()
             dismissBehaviourNotification()
@@ -273,6 +350,14 @@ class MachinePresenter @Inject constructor(
                         BehaviourType.SCREEN -> {
                             val action = behavior.toScreenAction()
                             view?.showScreen(timer, currentStep.label, action.fullScreen)
+                        }
+                        BehaviourType.QR_SCAN -> {
+                            // Nothing is watching this timer's running screen to auto-launch
+                            // the scanner itself (e.g. it was started from the timer list) —
+                            // bring one to the foreground so the scan can actually happen.
+                            if (listeners[id].isNullOrEmpty()) {
+                                view?.launchQrScanScreen(timer, currentStep.label)
+                            }
                         }
                         BehaviourType.VIBRATION -> {
                             val action = behavior.toVibrationAction()
@@ -637,7 +722,7 @@ class MachinePresenter @Inject constructor(
         view?.beginReading(content = content, sayMore = true)
     }
 
-    override fun confirmAlert(timerId: Int, index: TimerIndex) {
+    override fun terminalWaitAlert(timerId: Int, index: TimerIndex) {
         val timer = timers[timerId]?.timer ?: return
         val currentStep = timer.getStep(index) ?: return
         val stepBehaviours = currentStep.behaviour
@@ -646,7 +731,7 @@ class MachinePresenter @Inject constructor(
             val action = behavior.toBeepAction()
             // enableTone only arms the Beeper; playTone is what actually makes a sound
             // (on a normal countdown, the per-second BeepTickListener calls playTone
-            // on every tick — there's no such ticking during the confirm wait, so a
+            // on every tick — there's no such ticking during the terminal wait, so a
             // single explicit beep pulse per nag stands in for that here).
             view?.enableTone(
                 tone = action.soundIndex,

@@ -913,6 +913,14 @@ class MachinePresenterUnitTest {
             throw IllegalAccessException("Nope")
         }
 
+        override fun launchQrScanScreen(timerItem: TimerEntity, currentStepName: String) {
+            throw IllegalAccessException("Nope")
+        }
+
+        override fun closeQrScanScreen() {
+            throw IllegalAccessException("Nope")
+        }
+
         override fun beginReading(
             content: CharSequence?,
             contentRes: Int,

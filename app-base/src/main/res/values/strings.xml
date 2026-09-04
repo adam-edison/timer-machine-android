@@ -172,6 +172,18 @@
     <string name="confirm_nag_interval_desp_usage">Enter the number of seconds between replays of this step\'s voice/beep while waiting for you to confirm</string>
     <string name="confirm_nag_interval_desp_0_meaning">0 to only play once, when confirmation is needed</string>
 
+    <string name="behaviour_qr_scan">QR Scan</string>
+    <string name="behaviour_qr_scan_help">This step can\'t be left — by \"Next\", jumping to it, or its own countdown finishing — until a QR code is scanned. The scanner launches automatically as soon as the step starts</string>
+    <string name="qr_scan_saved_code_title">Required Code</string>
+    <string name="qr_scan_saved_code_any">Any code</string>
+    <string name="qr_scan_saved_code_clear">Accept any code</string>
+    <string name="qr_scan_register_success">Code saved</string>
+    <string name="qr_scan_wrong_code">That code doesn\'t match — try again</string>
+    <string name="qr_scan_emergency_exit">Emergency Exit</string>
+    <string name="qr_scan_emergency_exit_desp_usage">Enter how many seconds after this step\'s countdown ends (or, for Halt, after it starts) before \"Next\" works again even without a scan</string>
+    <string name="qr_scan_emergency_exit_desp_0_meaning">0 to disable — only a scan can ever advance this step</string>
+    <string name="qr_scan_emergency_exit_countdown">%1$s — escape in %2$ds</string>
+
     <string name="behaviour_voice">Voice</string>
     <string name="behaviour_voice_help">Read this step name</string>
     <string name="voice_content_title">Talking Content</string>
@@ -379,6 +391,7 @@
     <string name="notif_timer_running">%1$s running</string>
     <string name="notif_timer_paused">%1$s paused</string>
     <string name="notif_timer_screen_showing">%1$s is waking the screen</string>
+    <string name="notif_qr_scan_needed">Scan a QR code to continue \"%1$s\"</string>
 
     <string name="notif_channel_fore_title">Foreground Service</string>
     <string name="notif_channel_fore_desp">Controls all notifications</string>

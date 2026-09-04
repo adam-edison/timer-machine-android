@@ -50,6 +50,7 @@ class OneFragment :
         setUpViews(binding)
         applySettings(binding)
         setUpObservers(binding)
+        setUpQrScanObserver()
     }
 
     private fun setUpViews(binding: FragmentOneBinding) {
@@ -297,16 +298,13 @@ class OneFragment :
         viewModel.timerCurrentIndex.observe(viewLifecycleOwner) { index ->
             if (index == null) return@observe
             val timer = viewModel.timer.value ?: return@observe
-            binding.layoutOneStepName.text.setTextIfChanged(timer.getStep(index)?.label)
+            updateStepNameText(binding)
             binding.textOneLoop.setTextIfChanged(index.getNiceLoopString(timer.loop))
             binding.listOneSteps.toIndex(index)
         }
         viewModel.timer.observe(viewLifecycleOwner) { timer ->
             if (timer == null) return@observe
-            val index = viewModel.timerCurrentIndex.value
-            if (index != null) {
-                binding.layoutOneStepName.text.setTextIfChanged(timer.getStep(index)?.label)
-            }
+            updateStepNameText(binding)
             binding.listOneSteps.setTimer(timer)
         }
         viewModel.timerCurrentState.observe(viewLifecycleOwner) { state ->
@@ -318,6 +316,24 @@ class OneFragment :
                 }
             )
         }
+        // Ticks once a second while a QR_SCAN step's emergency exit is counting down —
+        // updateStepNameText appends/removes the countdown as it changes.
+        viewModel.qrScanEmergencyExitSeconds.observe(viewLifecycleOwner) {
+            updateStepNameText(binding)
+        }
+    }
+
+    private fun updateStepNameText(binding: FragmentOneBinding) {
+        val timer = viewModel.timer.value ?: return
+        val index = viewModel.timerCurrentIndex.value ?: return
+        val label = timer.getStep(index)?.label ?: return
+        val emergencyExitSeconds = viewModel.qrScanEmergencyExitSeconds.value
+        val text = if (emergencyExitSeconds != null) {
+            getString(RBase.string.qr_scan_emergency_exit_countdown, label, emergencyExitSeconds)
+        } else {
+            label
+        }
+        binding.layoutOneStepName.text.setTextIfChanged(text)
     }
 
     companion object {

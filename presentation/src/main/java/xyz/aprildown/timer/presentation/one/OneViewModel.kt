@@ -9,9 +9,12 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.launch
 import xyz.aprildown.timer.domain.di.MainDispatcher
+import xyz.aprildown.timer.domain.entities.BehaviourType
 import xyz.aprildown.timer.domain.entities.FolderEntity
 import xyz.aprildown.timer.domain.entities.StepEntity
 import xyz.aprildown.timer.domain.entities.TimerEntity
+import xyz.aprildown.timer.domain.entities.matches
+import xyz.aprildown.timer.domain.entities.toQrScanAction
 import xyz.aprildown.timer.domain.usecases.timer.FindTimerInfo
 import xyz.aprildown.timer.domain.usecases.timer.GetTimer
 import xyz.aprildown.timer.domain.usecases.timer.SaveTimer
@@ -71,6 +74,21 @@ class OneViewModel @Inject constructor(
     val intentEvent: LiveData<Event<Intent>> = _intentEvent
     private val _finishEvent = MutableLiveData<Event<Unit>>()
     val finishEvent: LiveData<Event<Unit>> = _finishEvent
+    private val _qrScanRequestEvent = MutableLiveData<Event<Unit>>()
+    val qrScanRequestEvent: LiveData<Event<Unit>> = _qrScanRequestEvent
+
+    // Seconds left until "Next" works again without a scan, or null if not applicable —
+    // refreshed on every tick while running so the running screen can show a live countdown.
+    private val _qrScanEmergencyExitSeconds = MutableLiveData<Int?>()
+    val qrScanEmergencyExitSeconds: LiveData<Int?> = _qrScanEmergencyExitSeconds
+
+    // The scanner itself backgrounds this screen while it's up, so returning from a scan
+    // attempt (success, cancel, or failure) re-runs the bind → attachPresenter() →
+    // setTimerItem() path (BaseOneFragment binds to MachineService in onStart). Without this,
+    // that would fire qrScanRequestEvent again on every single return trip, auto-relaunching
+    // the scanner in an unbreakable loop for as long as the step stays locked. Track the last
+    // index actually auto-launched for and only fire again once the step genuinely changes.
+    private var lastAutoLaunchedQrScanIndex: TimerIndex? = null
 
     private var presenter: MachineContract.Presenter? = null
 
@@ -259,6 +277,24 @@ class OneViewModel @Inject constructor(
         messageEvent.value = Event(R.string.one_ui_locked)
     }
 
+    // Delegates rather than reimplementing: whether a step is locked can depend on live
+    // task state (an emergency exit elapsing) this ViewModel has no access to — the
+    // presenter is the single source of truth, same one moveTimer()/etc. already use.
+    fun isCurrentStepQrLocked(): Boolean = presenter?.isCurrentStepQrLocked(timerId) == true
+
+    fun onQrScanResult(scannedCode: String) {
+        val index = timerCurrentIndex.value ?: return
+        val action = timer.value?.getStep(index)?.behaviour
+            ?.find { it.type == BehaviourType.QR_SCAN }
+            ?.toQrScanAction()
+            ?: return
+        if (action.matches(scannedCode)) {
+            _intentEvent.value = Event(streamMachineIntentProvider.qrScanSuccessIntent(timerId))
+        } else {
+            messageEvent.value = Event(R.string.qr_scan_wrong_code)
+        }
+    }
+
     private fun setTimerItem(
         timerItem: TimerEntity,
         state: StreamState,
@@ -276,6 +312,26 @@ class OneViewModel @Inject constructor(
         timerStepTime = timerItem.getStep(index)?.length ?: 0L
         elapsedBaseTime = timerItem.getTimeBeforeIndex(index)
         elapsedCurrentTime.value = 0L
+
+        // Covers attaching to a timer that's already running a QR_SCAN step — e.g. it was
+        // started from the timer list rather than by opening this running screen first, so
+        // started() (and its own qrScanRequestEvent trigger) already fired before this
+        // ViewModel/listener even existed to hear it.
+        if (state == StreamState.RUNNING) {
+            requestQrScanIfNeeded(index)
+            refreshQrScanEmergencyExitSeconds()
+        }
+    }
+
+    private fun requestQrScanIfNeeded(index: TimerIndex) {
+        if (isCurrentStepQrLocked() && lastAutoLaunchedQrScanIndex != index) {
+            lastAutoLaunchedQrScanIndex = index
+            _qrScanRequestEvent.value = Event(Unit)
+        }
+    }
+
+    private fun refreshQrScanEmergencyExitSeconds() {
+        _qrScanEmergencyExitSeconds.value = presenter?.secondsUntilQrScanEmergencyExit(timerId)
     }
 
     private fun detachListener() {
@@ -300,6 +356,9 @@ class OneViewModel @Inject constructor(
         timerStepTime = timer.value?.getStep(index)?.length ?: 0L
         elapsedBaseTime = timer.value?.getTimeBeforeIndex(index) ?: 0L
         elapsedCurrentTime.value = 0L
+
+        requestQrScanIfNeeded(index)
+        refreshQrScanEmergencyExitSeconds()
     }
 
     override fun paused(timerId: Int) {
@@ -309,6 +368,7 @@ class OneViewModel @Inject constructor(
     override fun updated(timerId: Int, time: Long) {
         elapsedCurrentTime.value = timerStepTime - time
         timerCurrentTime.value = time
+        refreshQrScanEmergencyExitSeconds()
     }
 
     override fun finished(timerId: Int) = Unit

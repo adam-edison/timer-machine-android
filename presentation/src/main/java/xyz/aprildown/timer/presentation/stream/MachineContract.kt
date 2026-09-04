@@ -60,6 +60,14 @@ interface MachineContract {
         fun showScreen(timerItem: TimerEntity, currentStepName: String, fullScreen: Boolean)
         fun closeScreen()
 
+        /**
+         * A QR_SCAN step just started and nothing is currently watching this timer (no
+         * running screen open for it) — launch one via a full-screen-intent notification,
+         * the same mechanism [showScreen] uses, so the scan can actually be triggered.
+         */
+        fun launchQrScanScreen(timerItem: TimerEntity, currentStepName: String)
+        fun closeQrScanScreen()
+
         // Halt is handled in the presenter
 
         fun beginReading(
@@ -112,11 +120,34 @@ interface MachineContract {
          */
         fun getTimerStateInfo(id: Int): CurrentTimerInfo?
 
+        /**
+         * True while the timer's currently active step carries QR_SCAN and — if it has an
+         * emergency exit configured — that many seconds haven't yet passed since the step's
+         * nominal end. The single source of truth for whether "Next" is currently blocked;
+         * callers must not reimplement this check, since it depends on live task state
+         * (elapsed time) this interface doesn't otherwise expose.
+         */
+        fun isCurrentStepQrLocked(timerId: Int): Boolean
+
+        /**
+         * Seconds left until "Next" starts working again without a scan, or null if
+         * there's no QR_SCAN step active, no emergency exit configured for it, its
+         * countdown hasn't started yet (still before the step's nominal end), or it's
+         * already available.
+         */
+        fun secondsUntilQrScanEmergencyExit(timerId: Int): Int?
+
         fun startTimer(timerId: Int, index: TimerIndex? = null)
         fun pauseTimer(timerId: Int)
         fun moveTimer(timerId: Int, index: TimerIndex)
         fun decreTimer(timerId: Int)
         fun increTimer(timerId: Int)
+
+        /**
+         * Moves off a QR_SCAN step after a successful scan, bypassing the block that
+         * [moveTimer]/[decreTimer]/[increTimer] apply while that step is active.
+         */
+        fun advancePastQrScan(timerId: Int)
         fun resetTimer(timerId: Int)
         fun adjustAmount(timerId: Int, amount: Long, goBackOnNotifier: Boolean)
 

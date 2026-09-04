@@ -184,6 +184,10 @@ class MachinePresenterTest {
             showingScreen = false
         }
 
+        override fun launchQrScanScreen(timerItem: TimerEntity, currentStepName: String) = Unit
+
+        override fun closeQrScanScreen() = Unit
+
         override fun beginReading(
             content: CharSequence?,
             contentRes: Int,

@@ -21,6 +21,7 @@ object Constants {
     const val NOTIF_ID_SCREEN = Int.MAX_VALUE - 1
     const val NOTIF_ID_NOTIFICATION = Int.MAX_VALUE - 2
     const val NOTIF_ID_APP_INFO = Int.MAX_VALUE - 3
+    const val NOTIF_ID_QR_SCAN = Int.MAX_VALUE - 4
 
     // region Links
 

@@ -30,6 +30,7 @@ import xyz.aprildown.timer.domain.entities.CountAction
 import xyz.aprildown.timer.domain.entities.HalfAction
 import xyz.aprildown.timer.domain.entities.MusicAction
 import xyz.aprildown.timer.domain.entities.NotificationAction
+import xyz.aprildown.timer.domain.entities.QrScanAction
 import xyz.aprildown.timer.domain.entities.ScreenAction
 import xyz.aprildown.timer.domain.entities.SkipAction
 import xyz.aprildown.timer.domain.entities.VibrationAction
@@ -193,6 +194,57 @@ internal fun MaterialPopupMenuBuilder.addConfirmItems(
                     },
                 ) {
                     onNagIntervalSeconds.invoke(it.toIntOrNull() ?: 0)
+                }
+            }
+        }
+    }
+}
+
+internal fun MaterialPopupMenuBuilder.addQrScanItems(
+    context: Context,
+    action: QrScanAction,
+    onScanToSetSavedCode: () -> Unit,
+    onClearSavedCode: () -> Unit,
+    onEmergencyExitSeconds: (Int) -> Unit,
+) {
+    section {
+        item {
+            label = "${context.getString(RBase.string.qr_scan_saved_code_title)}: " +
+                action.savedCode.ifBlank { context.getString(RBase.string.qr_scan_saved_code_any) }
+            callback = onScanToSetSavedCode
+        }
+        if (action.savedCode.isNotBlank()) {
+            item {
+                label = context.getString(RBase.string.qr_scan_saved_code_clear)
+                callback = onClearSavedCode
+            }
+        }
+    }
+    section {
+        item {
+            label = "${context.getString(RBase.string.qr_scan_emergency_exit)}: " +
+                "${action.emergencyExitSeconds}"
+            callback = {
+                SimpleInputDialog(context).show(
+                    titleRes = RBase.string.qr_scan_emergency_exit,
+                    preFill = action.emergencyExitSeconds.toString(),
+                    inputType = InputType.TYPE_CLASS_NUMBER,
+                    message = buildSpannedString {
+                        val gapWidth = context.dimen(RBase.dimen.bullet_span_gap_width)
+                        append(
+                            context.getString(RBase.string.qr_scan_emergency_exit_desp_usage),
+                            BulletSpan(gapWidth),
+                            Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                        )
+                        appendLine()
+                        append(
+                            context.getString(RBase.string.qr_scan_emergency_exit_desp_0_meaning),
+                            BulletSpan(gapWidth),
+                            Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                        )
+                    },
+                ) {
+                    onEmergencyExitSeconds.invoke(it.toIntOrNull() ?: 0)
                 }
             }
         }
