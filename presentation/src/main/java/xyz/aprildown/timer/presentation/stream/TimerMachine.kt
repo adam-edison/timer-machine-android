@@ -92,12 +92,24 @@ internal class TimerMachine(
     }
 
     override fun provideFirstTask(): Task? {
-        val firstIndex = timer.getFirstIndex()
+        var firstIndex = timer.getFirstIndex()
+        while (true) {
+            val skip = timer.shouldSkip(firstIndex)
+            val isLast = firstIndex == theLastIndex
+            when {
+                skip && isLast -> return null
+                skip -> firstIndex = getNextIndexWithStep(timer.steps, timer.loop, firstIndex).first
+                else -> break
+            }
+        }
+
         val (_, nextStepAfterNext) = getNextIndexWithStep(
             timer.steps,
             timer.loop,
             firstIndex
         )
+
+        currentIndex = firstIndex
         return timer.getStep(firstIndex)?.toTask(
             useTtsNextStep = nextStepAfterNext?.behaviour?.any { it.useTts() } == true
         )

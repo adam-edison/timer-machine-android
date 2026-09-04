@@ -2,10 +2,11 @@ package xyz.aprildown.timer.app.timer.list
 
 import android.view.View
 import android.widget.ImageButton
+import android.widget.ImageView
 import android.widget.TextView
 import androidx.core.view.isVisible
 import androidx.recyclerview.widget.RecyclerView
-import xyz.aprildown.timer.app.base.utils.produceTime
+import xyz.aprildown.timer.app.base.utils.produceCompactTime
 import xyz.aprildown.timer.domain.entities.FolderEntity
 import xyz.aprildown.timer.app.base.R as RBase
 
@@ -16,6 +17,8 @@ internal class CollapsedViewHolder(
 
     private val name = view.findViewById<TextView>(R.id.textTimerName)
     private val duration = view.findViewById<TextView>(R.id.textTimerDuration)
+    private val iconDurationRange = view.findViewById<ImageView>(R.id.iconTimerDurationRange)
+    private val durationRange = view.findViewById<TextView>(R.id.textTimerDurationRange)
     private val start = view.findViewById<ImageButton>(R.id.imageTimerStartPause)
 
     init {
@@ -36,7 +39,18 @@ internal class CollapsedViewHolder(
 
     fun bind(item: MutableTimerItem) {
         name.text = item.timerName
-        duration.text = item.timerDuration.produceTime()
+
+        val (today, min, max) = item.timerDuration
+        val hasRange = min != max
+
+        duration.text = today.produceCompactTime()
+
+        iconDurationRange.isVisible = hasRange
+        durationRange.isVisible = hasRange
+        if (hasRange) {
+            durationRange.text = "${min.produceCompactTime()} - ${max.produceCompactTime()}"
+        }
+
         start.isVisible = item.timerInfo.folderId != FolderEntity.FOLDER_TRASH
     }
 

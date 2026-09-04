@@ -51,6 +51,7 @@ import xyz.aprildown.timer.app.base.ui.AppNavigator
 import xyz.aprildown.timer.app.base.ui.BaseActivity
 import xyz.aprildown.timer.app.base.utils.ShortcutHelper
 import xyz.aprildown.timer.app.timer.edit.databinding.ActivityEditTimerBinding
+import xyz.aprildown.timer.app.timer.edit.media.ConditionDaysDialog
 import xyz.aprildown.timer.app.timer.edit.utils.SaveInstanceHelper
 import xyz.aprildown.timer.component.key.DurationPicker
 import xyz.aprildown.timer.component.key.behaviour.EditableBehaviourLayout
@@ -418,6 +419,16 @@ class EditActivity :
         }.show()
     }
 
+    override fun onConditionClick(view: View, position: Int) {
+        hideKeyboard()
+
+        val item = getStepFromFastAdapter(position)
+        ConditionDaysDialog(this).show(item.conditionDays) { newConditionDays ->
+            item.conditionDays = newConditionDays
+            fastAdapter.notifyAdapterItemChanged(position, EditableStep.Event.Condition)
+        }
+    }
+
     private fun updateStepLength(position: Int, length: Long) {
         val item = getStepFromFastAdapter(position)
         if (item.stepType == StepType.NOTIFIER) {
@@ -477,7 +488,8 @@ class EditActivity :
                                     behaviour = currentStep.behaviour,
                                     stepType = currentStep.type,
                                     handler = this@EditActivity,
-                                    isInAGroup = editableStep.isInAGroup
+                                    isInAGroup = editableStep.isInAGroup,
+                                    conditionDays = currentStep.conditionDays
                                 )
                             )
                         }
@@ -570,7 +582,8 @@ class EditActivity :
                                             behaviour = currentStep.behaviour,
                                             stepType = currentStep.type,
                                             handler = this@EditActivity,
-                                            isInAGroup = editableStep.isInAGroup
+                                            isInAGroup = editableStep.isInAGroup,
+                                            conditionDays = currentStep.conditionDays
                                         )
                                     }
                                 )
@@ -1130,7 +1143,8 @@ class EditActivity :
             behaviour = behaviour,
             stepType = type,
             handler = this@EditActivity,
-            isInAGroup = isInAGroup
+            isInAGroup = isInAGroup,
+            conditionDays = conditionDays
         )
     }
 
@@ -1174,7 +1188,8 @@ class EditActivity :
             label = label,
             length = length,
             behaviour = behaviour,
-            type = stepType
+            type = stepType,
+            conditionDays = conditionDays
         )
     }
 
@@ -1244,7 +1259,7 @@ class EditActivity :
 
     // Every notifier should be independent.
     private fun getNotifierCopy(isInAGroup: Boolean): EditableStep = with(viewModel.notifier) {
-        EditableStep(label, length, behaviour, type, this@EditActivity, isInAGroup)
+        EditableStep(label, length, behaviour, type, this@EditActivity, isInAGroup, conditionDays)
     }
 
     private fun saveTimer() {

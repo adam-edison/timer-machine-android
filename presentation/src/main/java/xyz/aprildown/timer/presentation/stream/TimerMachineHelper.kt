@@ -9,6 +9,8 @@ import xyz.aprildown.timer.domain.entities.SkipAction
 import xyz.aprildown.timer.domain.entities.StepEntity
 import xyz.aprildown.timer.domain.entities.TimerEntity
 import xyz.aprildown.timer.domain.entities.VoiceAction
+import xyz.aprildown.timer.domain.entities.matchesDayOfWeek
+import xyz.aprildown.timer.domain.entities.todayCalendarDayIndex
 import xyz.aprildown.timer.domain.entities.toHalfAction
 import xyz.aprildown.timer.domain.entities.toSkipAction
 
@@ -407,21 +409,42 @@ fun TimerEntity.getTimerLoop(index: TimerIndex): Int = when (index) {
     is TimerIndex.End -> loop - 1
 }
 
-fun TimerEntity.getTotalTime(): Long {
+fun TimerEntity.getTotalTime(calendarDayIndex: Int = todayCalendarDayIndex()): Long {
     var time = 0L
     forEachStep { index, _, step ->
-        if (!shouldSkip(index)) {
+        if (!shouldSkip(index, calendarDayIndex)) {
             time += step.length
         }
     }
     return time
 }
 
-fun TimerEntity.getTimeBeforeIndex(index: TimerIndex): Long {
+/**
+ * The longest this timer could ever run, across the 7 real days of the week —
+ * computed by evaluating [getTotalTime] for each one and taking the max. Two steps
+ * with complementary conditions (e.g. one Mon/Wed/Fri, another every other day) can
+ * each individually be "conditioned," yet together guarantee coverage every day;
+ * only checking real days (not a same-for-every-step ignore-the-condition shortcut)
+ * gets that right.
+ */
+fun TimerEntity.getMaxTotalTime(): Long = ALL_CALENDAR_DAY_INDICES.maxOf { getTotalTime(it) }
+
+/**
+ * The shortest this timer could ever run, across the 7 real days of the week — the
+ * minimum counterpart to [getMaxTotalTime], same reasoning.
+ */
+fun TimerEntity.getMinTotalTime(): Long = ALL_CALENDAR_DAY_INDICES.minOf { getTotalTime(it) }
+
+private val ALL_CALENDAR_DAY_INDICES = 0..6
+
+fun TimerEntity.getTimeBeforeIndex(
+    index: TimerIndex,
+    calendarDayIndex: Int = todayCalendarDayIndex()
+): Long {
     var time = 0L
     forEachStep { currentIndex, _, step ->
         if (currentIndex == index) return time
-        if (!shouldSkip(currentIndex)) {
+        if (!shouldSkip(currentIndex, calendarDayIndex)) {
             time += step.length
         }
     }
@@ -926,23 +949,39 @@ fun BehaviourEntity.useTts(): Boolean {
     return false
 }
 
-internal fun TimerEntity.shouldSkip(index: TimerIndex): Boolean {
+internal fun TimerEntity.shouldSkip(
+    index: TimerIndex,
+    calendarDayIndex: Int = todayCalendarDayIndex()
+): Boolean {
     return when (index) {
-        TimerIndex.Start -> startStep?.shouldSkip(loopIndex = 0, maxLoop = loop) == true
+        TimerIndex.Start ->
+            startStep?.shouldSkip(loopIndex = 0, maxLoop = loop, calendarDayIndex) == true
         is TimerIndex.Step -> {
-            getStep(index)?.shouldSkip(loopIndex = index.loopIndex, maxLoop = loop) == true
+            getStep(index)?.shouldSkip(
+                loopIndex = index.loopIndex,
+                maxLoop = loop,
+                calendarDayIndex
+            ) == true
         }
         is TimerIndex.Group -> {
             getStep(index)?.shouldSkip(
                 loopIndex = index.groupStepIndex.loopIndex,
-                maxLoop = getGroup(index)?.loop ?: 0
+                maxLoop = getGroup(index)?.loop ?: 0,
+                calendarDayIndex
             ) == true
         }
-        TimerIndex.End -> endStep?.shouldSkip(loopIndex = loop - 1, maxLoop = loop) == true
+        TimerIndex.End ->
+            endStep?.shouldSkip(loopIndex = loop - 1, maxLoop = loop, calendarDayIndex) == true
     }
 }
 
-internal fun StepEntity.Step.shouldSkip(loopIndex: Int, maxLoop: Int): Boolean {
+internal fun StepEntity.Step.shouldSkip(
+    loopIndex: Int,
+    maxLoop: Int,
+    calendarDayIndex: Int = todayCalendarDayIndex()
+): Boolean {
+    if (!conditionDays.matchesDayOfWeek(calendarDayIndex)) return true
+
     val target =
         behaviour.find { it.type == BehaviourType.SKIP }?.toSkipAction()?.target
             ?: return false

@@ -42,7 +42,8 @@ internal class StepOnlyMapper @Inject constructor(
             label = from.label,
             length = from.length,
             behaviour = behaviourMapper.mapFrom(from.behaviour),
-            type = from.type
+            type = from.type,
+            conditionDays = from.conditionDays
         )
     }
 
@@ -51,7 +52,8 @@ internal class StepOnlyMapper @Inject constructor(
             label = from.label,
             length = from.length,
             behaviour = behaviourMapper.mapTo(from.behaviour),
-            type = from.type
+            type = from.type,
+            conditionDays = from.conditionDays
         )
     }
 }

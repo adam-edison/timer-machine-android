@@ -51,6 +51,26 @@ class WeekdaysFormatter(
         return builder.toString()
     }
 
+    /**
+     * Compact single-letter-per-day form, e.g. "MWF" for Monday/Wednesday/Friday, with
+     * no separators. Used where space is tight (a quick glance next to an icon) and
+     * [produceDataStrings]'s comma-joined full names would be too long. Uses a fixed,
+     * unambiguous letter per day (Tuesday/Thursday and Saturday/Sunday would otherwise
+     * collide on their first letter) rather than locale weekday names.
+     * @data db format
+     */
+    fun produceCompactDataString(data: List<Boolean>): String {
+        val weekdayOrder = WeekDayOrder.fromStartDay(startWeekOn)
+
+        val builder = StringBuilder(7)
+        for (calendarDay in weekdayOrder.days) {
+            if (data[calendarDayToDayIndex(calendarDay)]) {
+                builder.append(SINGLE_LETTER_DAYS.getValue(calendarDay))
+            }
+        }
+        return builder.toString()
+    }
+
     sealed class WeekDayOrder(val days: IntArray) {
         class Monday : WeekDayOrder(
             intArrayOf(MONDAY, TUESDAY, WEDNESDAY, THURSDAY, FRIDAY, SATURDAY, SUNDAY)
@@ -95,6 +115,18 @@ class WeekdaysFormatter(
     }
 
     companion object {
+
+        // Unambiguous single letter per day: Tuesday/Thursday and Saturday/Sunday would
+        // otherwise collide on their first letter (T/T, S/S).
+        private val SINGLE_LETTER_DAYS = mapOf(
+            MONDAY to "M",
+            TUESDAY to "T",
+            WEDNESDAY to "W",
+            THURSDAY to "H",
+            FRIDAY to "F",
+            SATURDAY to "A",
+            SUNDAY to "U",
+        )
 
         /**
          * [MONDAY] 2 [TUESDAY] 3 [WEDNESDAY] 4 [THURSDAY] 5 [FRIDAY] 6 [SATURDAY] 7 [SUNDAY] 1

@@ -90,6 +90,45 @@
                 tools:ignore="UnusedAttribute"
                 tools:text="00:00" />
 
+            <ImageButton
+                android:id="@+id/btnStepCondition"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:layout_marginTop="4dp"
+                android:background="?selectableItemBackgroundBorderless"
+                android:contentDescription="@string/edit_condition_days"
+                app:layout_constraintStart_toStartOf="@id/colorStep"
+                app:layout_constraintTop_toBottomOf="@id/colorStep"
+                app:srcCompat="@drawable/ic_event" />
+
+            <TextView
+                android:id="@+id/textStepConditionDays"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:gravity="center"
+                android:textAppearance="?textAppearanceCaption"
+                android:textSize="9sp"
+                android:visibility="gone"
+                app:layout_constraintEnd_toEndOf="@id/btnStepCondition"
+                app:layout_constraintStart_toStartOf="@id/btnStepCondition"
+                app:layout_constraintTop_toBottomOf="@id/btnStepCondition"
+                tools:text="MTWHFAU"
+                tools:visibility="visible" />
+
+            <ImageButton
+                android:id="@+id/btnStepAdd"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:layout_marginTop="4dp"
+                android:layout_marginBottom="8dp"
+                android:background="?selectableItemBackgroundBorderless"
+                android:contentDescription="@string/edit_add_step"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintStart_toStartOf="@id/colorStep"
+                app:layout_constraintTop_toBottomOf="@id/textStepConditionDays"
+                app:layout_constraintVertical_bias="1"
+                app:srcCompat="@drawable/ic_add" />
+
             <xyz.aprildown.timer.component.key.behaviour.EditableBehaviourLayout
                 android:id="@+id/layoutBehaviour"
                 android:layout_width="0dp"
@@ -101,19 +140,6 @@
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintStart_toStartOf="@id/editStepName"
                 app:layout_constraintTop_toBottomOf="@id/editStepName" />
-
-            <ImageButton
-                android:id="@+id/btnStepAdd"
-                android:layout_width="32dp"
-                android:layout_height="32dp"
-                android:layout_marginBottom="8dp"
-                android:background="?selectableItemBackgroundBorderless"
-                android:contentDescription="@string/edit_add_step"
-                app:layout_constraintBottom_toBottomOf="parent"
-                app:layout_constraintStart_toStartOf="@id/colorStep"
-                app:layout_constraintTop_toBottomOf="@id/colorStep"
-                app:layout_constraintVertical_bias="1"
-                app:srcCompat="@drawable/ic_add" />
 
         </androidx.constraintlayout.widget.ConstraintLayout>
 

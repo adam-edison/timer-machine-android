@@ -8,6 +8,7 @@ import android.view.inputmethod.EditorInfo
 import android.widget.EditText
 import android.widget.ImageButton
 import android.widget.ImageView
+import android.widget.TextView
 import androidx.annotation.VisibleForTesting
 import androidx.core.view.isVisible
 import androidx.core.widget.ImageViewCompat
@@ -16,8 +17,10 @@ import com.github.deweyreed.tools.helper.gone
 import com.github.deweyreed.tools.helper.show
 import com.github.deweyreed.tools.helper.showActionAndMultiLine
 import com.github.deweyreed.tools.helper.toColorStateList
+import com.github.deweyreed.tools.utils.ThemeColorUtils
 import com.mikepenz.fastadapter.items.AbstractItem
 import xyz.aprildown.timer.app.base.data.PreferenceData.getTypeColor
+import xyz.aprildown.timer.app.base.utils.WeekdaysFormatter
 import xyz.aprildown.timer.app.base.utils.setTime
 import xyz.aprildown.timer.component.key.RoundTextView
 import xyz.aprildown.timer.component.key.behaviour.EditableBehaviourLayout
@@ -34,13 +37,15 @@ class EditableStep(
     var behaviour: List<BehaviourEntity>,
     val stepType: StepType = StepType.NORMAL,
     private val handler: Handler,
-    var isInAGroup: Boolean = false
+    var isInAGroup: Boolean = false,
+    var conditionDays: List<Boolean>? = null
 ) : AbstractItem<EditableStep.ViewHolder>() {
 
     sealed class Event {
         data object Length : Event()
         data object Behaviour : Event()
         data object InOutGroup : Event()
+        data object Condition : Event()
     }
 
     /**
@@ -51,6 +56,7 @@ class EditableStep(
         fun onStepNameChange(position: Int, newName: String)
         fun onLengthClick(view: View, position: Int)
         fun onAddBtnClick(view: View, position: Int)
+        fun onConditionClick(view: View, position: Int)
 
         fun onBehaviourListShow()
         fun showBehaviourSettingsView(
@@ -96,6 +102,8 @@ class EditableStep(
         private val length: RoundTextView = view.findViewById(R.id.textStepLength)
         private val behaviour: EditableBehaviourLayout = view.findViewById(R.id.layoutBehaviour)
         private val addBtn: ImageButton = view.findViewById(R.id.btnStepAdd)
+        private val conditionBtn: ImageButton = view.findViewById(R.id.btnStepCondition)
+        private val conditionDaysText: TextView = view.findViewById(R.id.textStepConditionDays)
 
         private var stepNameTextChangeListener: TextWatcher? = null
 
@@ -104,6 +112,10 @@ class EditableStep(
 
             length.setOnClickListener {
                 handler.onLengthClick(it, bindingAdapterPosition)
+            }
+
+            conditionBtn.setOnClickListener {
+                handler.onConditionClick(it, bindingAdapterPosition)
             }
 
             behaviour.setListener(
@@ -158,8 +170,27 @@ class EditableStep(
                             startStepGroupIndicator.isVisible = inAGroup
                             endStepGroupIndicator.isVisible = inAGroup
                         }
+                        is Event.Condition -> {
+                            bindCondition(item)
+                        }
                     }
                 }
+            }
+        }
+
+        private fun bindCondition(item: EditableStep) {
+            val color = item.stepType.getTypeColor(context)
+            val conditionDays = item.conditionDays
+            conditionBtn.imageTintList = ColorStateList.valueOf(
+                if (conditionDays != null) color else ThemeColorUtils.adjustAlpha(color, 0.4f)
+            )
+
+            if (conditionDays != null) {
+                conditionDaysText.text = WeekdaysFormatter.createFromContext(context)
+                    .produceCompactDataString(conditionDays)
+                conditionDaysText.show()
+            } else {
+                conditionDaysText.gone()
             }
         }
 
@@ -210,6 +241,8 @@ class EditableStep(
                     handler.onAddBtnClick(it, bindingAdapterPosition)
                 }
             }
+
+            bindCondition(item)
 
             behaviour.setEnabledColor(color)
             behaviour.setBehaviours(item.behaviour)

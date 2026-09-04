@@ -9,7 +9,7 @@ use only (see licensing note at the bottom).
 - [x] [0. Personal branding](#0-personal-branding-do-first)
 - [x] [1. Total timer duration shown in the list](#1-total-timer-duration-shown-in-the-list)
 - [x] [2. Confirm behavior — count down, then wait for manual confirmation, with nagging](#2-confirm-behavior--count-down-then-wait-for-manual-confirmation-with-nagging)
-- [ ] [3. Day-of-week condition](#3-day-of-week-condition-on-a-step-or-group)
+- [x] [3. Day-of-week condition on a step](#3-day-of-week-condition-on-a-step)
 - [ ] [4. Time-of-day range condition](#4-time-of-day-range-condition)
 - [ ] [5. QR-scan dismiss mode for HALT](#5-qr-scan-dismiss-mode-for-halt)
 - [ ] [6. Searchable step-level activity log](#6-searchable-step-level-activity-log)
@@ -263,23 +263,140 @@ length, short nag interval) plus Beep. Confirmed on-device:
 
 Merged into `personal` via `git merge --no-ff feat/halt-nag-interval`.
 
-## 3. Day-of-week condition on a step or group
+## 3. Day-of-week condition on a step
 
 Branch: `feat/day-of-week-condition`
 
-**What:** a step or group only runs on the days you select (Mon–Sun multiselect);
-other days it's skipped entirely.
+**What:** a step only runs on the days you select (Mon–Sun multiselect); other
+days it's skipped entirely. Steps only — **deliberately not on groups** (see
+below). The timer list also shows, per timer, today's actual duration plus a
+min–max range for how much a day condition could ever shrink or grow it.
 
-**Touches:** new condition field on `StepEntity` · evaluated in `TimerMachine.kt` /
-`TimerMachineHelper.kt`'s existing `shouldSkip` hook (already used by
-`getTotalTime()`, so a correctly-implemented skip here is automatically reflected
-in item 1's duration display) · new day-picker UI.
+**Design:**
+- `StepEntity.Step` gets `val conditionDays: List<Boolean>? = null` —
+  Monday-based, same convention as `SchedulerEntity.days`. `null` means no
+  condition (always runs); a list with every day checked is *also*
+  unconditioned in effect (never excludes a day) — both cases matter and are
+  handled identically everywhere, including in the min/max math below.
+- **No condition on `Group`.** Originally built (a group's own
+  `conditionDays`, gating the whole group), then deliberately ripped back out:
+  a group condition combined with per-step conditions inside it needs
+  AND-of-both-match semantics to make sense, which is confusing to reason
+  about for a feature that isn't used with groups anyway. Simpler to keep
+  conditions on steps only and not support them on groups at all.
+- Since steps round-trip as a single JSON blob (`StepConverters` in
+  `data/.../db/Converters.kt`), adding the field needed no Room migration —
+  just `StepData.kt` + `StepMapper.kt`/`StepOnlyMapper`, Moshi defaults it to
+  `null` for any timer saved before this landed.
+- `TimerMachineHelper.kt`'s existing `shouldSkip` hook (already used by
+  `getTotalTime()`/`getTimeBeforeIndex()`) now also checks `conditionDays`
+  against a day-of-week index, threaded as a `calendarDayIndex: Int`
+  parameter (defaulting to today) through `shouldSkip`/`getTotalTime`/
+  `getTimeBeforeIndex`, so tests can pass a fixed day instead of depending on
+  whatever day the test happens to run.
+- **`TimerMachine.provideFirstTask()` didn't consult `shouldSkip` at all** —
+  found while making sure a conditioned-off *first* step actually gets
+  skipped. Turns out this was already a latent gap shared with the existing
+  `SKIP` behavior's `Target.First` option (a step skipped "on the first loop"
+  would still run once at the very start of a fresh timer). Fixed by giving
+  `provideFirstTask()` the same skip-forward loop `provideNextTask()` already
+  had — a correctness fix to already-shipped `SKIP` behavior, not just new
+  code for this feature.
+- **`getMinTotalTime()`/`getMaxTotalTime()`: the real bug of this feature.**
+  First cut used a shortcut — "max" = pretend every condition always matches,
+  "min" = pretend every condition (that excludes ≥1 day) never matches. Wrong:
+  two steps with *complementary* conditions (e.g. one Mon/Wed/Fri, the other
+  every other day) each individually "can be skipped," yet together guarantee
+  one of them runs every single day — the shortcut's min was 0, the real
+  minimum is never 0. Fixed by computing the actual total for each of the 7
+  real days (`getTotalTime(calendarDayIndex = 0..6)`) and taking the genuine
+  min/max of those 7 numbers — correct by construction, no per-step
+  reasoning to get wrong. `TimerMinMaxTotalTimeParameterizedTest.kt` locks
+  this down with 6 hand-reasoned cases (complementary conditions, a real gap
+  day where neither step runs, overlapping conditions, all-days-checked,
+  zero-days-checked, no condition) each checked two ways: against a
+  by-hand-computed expected value, and against an independent brute-force
+  sweep of the 7 days — so a future regression to the "pretend" shortcut
+  fails loudly.
+- UI: a calendar icon (`ic_event`) sits in the same column as the existing
+  "+" add-step icon — stacked vertically below the colored step dot, above
+  "+" — opening `ConditionDaysDialog` (`app-timer-edit/.../media/
+  ConditionDaysDialog.kt`, modeled on `SkipDialog.kt`): a 7-day toggle row
+  reusing the `MultiSelectToggleGroup`/`CircularToggle` widgets and
+  `WeekdaysFormatter` locale-aware day ordering the Scheduler feature already
+  uses. "Any day" clears the condition back to `null`. The icon dims when no
+  condition is set, lights up (step's type color) once one is, and a compact
+  single-letter day code (`WeekdaysFormatter.produceCompactDataString`, a
+  fixed unambiguous `M T W H F A U` per day — not locale weekday names, which
+  collide on Tue/Thu and Sat/Sun) appears directly under the icon, in the
+  same narrow column, only when a condition is set.
+- Originally tried starting the chip area (`layoutBehaviour`) further right
+  to dodge the new icon; simpler fix was putting the icon in the icon column
+  that already existed (shared with "+"), which was never at risk of
+  overlapping the behaviour-chip area regardless of chip count.
+- Timer list (item 1's duration display) now shows two things per timer: a
+  green-bordered hourglass + today's actual duration (`ic_time_panel_remaining`
+  tinted green, reusing the running-screen's existing "remaining time" icon —
+  shown for *every* timer, conditioned or not) and, only when a condition
+  creates real variability (min ≠ max), a blue hourglass + `min - max` range
+  next to it. Both use a new compact duration format (`Long.produceCompactTime()`
+  in `TimeConverter.kt`) — `"3h10m4s"`, `"1h"`, `"54s"`, no leading zeros or
+  colons — scoped to this one display, not the existing colon `produceTime()`
+  used elsewhere in the app.
+- Scoped to the main step editor (`EditActivity.kt`) only — not
+  `UpdateStepDialog.kt`'s quick single-step-edit popup (used from the running
+  screen). That dialog *does* need to preserve `conditionDays` when a step is
+  edited there, though — found and fixed a real data-loss bug where its "OK"
+  handler rebuilt a fresh `StepEntity.Step` without carrying the field
+  through, which would have silently wiped a step's day condition the first
+  time someone tweaked its length or behaviour from the running screen.
 
-**Effort:** 1–2 days.
+**Touches:** `StepEntity.kt` (new field + `matchesDayOfWeek`/
+`todayCalendarDayIndex`, domain) · `StepData.kt` + `StepMapper.kt` (data) ·
+`TimerMachineHelper.kt` (`shouldSkip`, day-index threading, `getMinTotalTime`/
+`getMaxTotalTime`) · `TimerMachine.kt` (`provideFirstTask` skip-forward fix) ·
+new `ConditionDaysDialog.kt` + `dialog_condition_days.xml` ·
+`item_edit_step.xml` (icon + day-letters column) · `EditableStep.kt` (field,
+click handler, tint, day-letters binding) · `EditActivity.kt` (handler method,
+`conditionDays` threaded through every place a `StepEntity.Step` gets built
+from or converted to an `EditableStep`) · `UpdateStepDialog.kt` (data-loss fix
+above) · `WeekdaysFormatter.kt` (`produceCompactDataString`) ·
+`TimeConverter.kt` (`produceCompactTime`) · `TimerViewModel.kt`
+(`TimerDuration(today, min, max)`) · `MutableTimerItem.kt` /
+`CollapsedViewHolder.kt` / both `list_item_timer_collapsed*.xml` (icon-based
+today/range display) · new `ic_event.xml` + `background_timer_duration_today.xml`
+· new strings · `app-timer-edit/build.gradle.kts` (added the
+`toggleButtonGroup` dependency, already used by `app-scheduler`).
 
-**Status:** not started
+**Tests:** `StepEntityKtTest.kt` (`matchesDayOfWeek`) ·
+`TimerMachineHelperKtTest.kt` (day-condition skip cases) ·
+`TimerMinMaxTotalTimeParameterizedTest.kt` (6-case parameterized suite for
+min/max, see above) · `WeekdaysFormatterTest.kt` (`produceCompactDataString`)
+· `TimeConverterTest.kt` (`produceCompactTime`) — all green, plus every
+pre-existing test in `domain`/`presentation`/`app-base` still green.
 
-**Manual test:** _(fill in after building)_
+**Effort:** noticeably more than the original 1–2 day estimate — most of the
+overrun was the min/max correctness bug (an easy-looking shortcut that was
+actually wrong) and several rounds of UI placement feedback (icon overlapping
+behaviour chips, day-letters position, "Up to" text → icons, group support
+added then removed).
+
+**Status:** done
+
+**Manual test:** Built and iterated live on-device via `scripts/deploy.sh`
+(`personal` flavor) against a physical device, screenshots taken after each
+change to confirm layout before handing back for review. Confirmed:
+setting/clearing a day condition on a step persists through save/reload;
+a conditioned-off step is skipped at runtime, including as the very first
+step of a timer; the calendar icon and day-letters render correctly
+alongside behaviour chips of any count, in both light data (empty step) and
+heavy (Confirm/Voice/Beep) cases; the timer list shows the green
+today-duration box on every timer and the blue min-max range only when a
+step's condition creates real variability; verified against a two-step
+timer with complementary Mon/Wed/Fri vs. rest-of-week conditions (the case
+that broke the first min/max implementation) that min and max now compute
+correctly instead of showing a bogus 0. Merged into `personal` via
+`git merge --no-ff feat/day-of-week-condition`.
 
 ## 4. Time-of-day range condition
 

@@ -100,6 +100,9 @@
     <string name="edit_group_start">Group Start</string>
     <string name="edit_group_end">Group End</string>
     <string name="edit_delete_group">Delete group</string>
+    <string name="edit_condition_days">Only run on certain days</string>
+    <string name="edit_condition_days_dialog_title">Only run on certain days</string>
+    <string name="edit_condition_days_clear">Any day</string>
     <string name="edit_step">Edit Step</string>
     <string name="edit_add_step">Add a new step</string>
     <string name="edit_add_normal">Normal</string>

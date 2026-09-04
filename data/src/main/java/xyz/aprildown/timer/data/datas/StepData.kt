@@ -21,7 +21,10 @@ internal sealed class StepData {
         val behaviour: List<BehaviourData> = emptyList(),
 
         @Json(name = "type")
-        val type: StepType = StepType.NORMAL
+        val type: StepType = StepType.NORMAL,
+
+        @Json(name = "conditionDays")
+        val conditionDays: List<Boolean>? = null
     ) : StepData()
 
     @Keep

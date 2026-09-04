@@ -17,4 +17,5 @@ dependencies {
     implementation(libs.materialPopupMenu)
     implementation(libs.ultimateRingtonePicker)
     implementation(libs.twoWayNestedScrollView)
+    implementation(libs.toggleButtonGroup)
 }

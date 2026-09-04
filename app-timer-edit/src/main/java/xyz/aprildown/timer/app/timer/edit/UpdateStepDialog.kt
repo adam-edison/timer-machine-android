@@ -107,6 +107,7 @@ class UpdateStepDialog :
                         length = length,
                         behaviour = binding.layoutBehaviour.getBehaviours(),
                         type = step.type,
+                        conditionDays = step.conditionDays,
                     )
                 )
             }

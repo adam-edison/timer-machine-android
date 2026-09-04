@@ -681,7 +681,139 @@ class TimerMachineHelperKtTest {
             timer.getTimeBeforeIndex(TimerIndex.End)
         )
     }
+
+    @Test
+    fun `time before loop 0 step 4 but condition day excludes today`() {
+        var timer = TestData.fakeTimerAdvanced
+        val steps = timer.steps
+        val excludesMonday = List(7) { dayIndex -> dayIndex != MONDAY }
+        timer = timer.copy(
+            steps = steps.mapIndexed { index, step ->
+                if (index == 2) {
+                    (step as StepEntity.Step).copy(conditionDays = excludesMonday)
+                } else {
+                    step
+                }
+            }
+        )
+        assertEquals(
+            timer.startStep!!.length +
+                (steps[0] as StepEntity.Step).length +
+                (steps[1] as StepEntity.Group).let { it.steps.accumulateTime(it.loop) } +
+                (steps[3] as StepEntity.Step).length,
+            timer.getTimeBeforeIndex(
+                TimerIndex.Group(
+                    loopIndex = 0,
+                    stepIndex = 4,
+                    groupStepIndex = TimerIndex.Step(loopIndex = 0, stepIndex = 0),
+                ),
+                calendarDayIndex = MONDAY
+            )
+        )
+    }
+
+    @Test
+    fun `time before loop 0 step 4 with condition day matching today isn't skipped`() {
+        var timer = TestData.fakeTimerAdvanced
+        val steps = timer.steps
+        val includesMonday = List(7) { dayIndex -> dayIndex == MONDAY }
+        timer = timer.copy(
+            steps = steps.mapIndexed { index, step ->
+                if (index == 2) {
+                    (step as StepEntity.Step).copy(conditionDays = includesMonday)
+                } else {
+                    step
+                }
+            }
+        )
+        assertEquals(
+            timer.startStep!!.length +
+                (steps[0] as StepEntity.Step).length +
+                (steps[1] as StepEntity.Group).let { it.steps.accumulateTime(it.loop) } +
+                (steps[2] as StepEntity.Step).length +
+                (steps[3] as StepEntity.Step).length,
+            timer.getTimeBeforeIndex(
+                TimerIndex.Group(
+                    loopIndex = 0,
+                    stepIndex = 4,
+                    groupStepIndex = TimerIndex.Step(loopIndex = 0, stepIndex = 0),
+                ),
+                calendarDayIndex = MONDAY
+            )
+        )
+    }
+
+    @Test
+    fun `getMaxTotalTime ignores an active day condition`() {
+        var timer = TestData.fakeTimerAdvanced
+        val steps = timer.steps
+        val mondayOnly = List(7) { dayIndex -> dayIndex == MONDAY }
+        timer = timer.copy(
+            steps = steps.mapIndexed { index, step ->
+                if (index == 2) {
+                    (step as StepEntity.Step).copy(conditionDays = mondayOnly)
+                } else {
+                    step
+                }
+            }
+        )
+        val conditionedStepLength = (timer.steps[2] as StepEntity.Step).length
+
+        assertEquals(timer.getTotalTime(calendarDayIndex = MONDAY), timer.getMaxTotalTime())
+        assertEquals(
+            timer.getMaxTotalTime() - timer.loop * conditionedStepLength,
+            timer.getTotalTime(calendarDayIndex = MONDAY + 1)
+        )
+    }
+
+    @Test
+    fun `getMinTotalTime excludes a conditioned step, even on its matching day`() {
+        var timer = TestData.fakeTimerAdvanced
+        val steps = timer.steps
+        val mondayOnly = List(7) { dayIndex -> dayIndex == MONDAY }
+        timer = timer.copy(
+            steps = steps.mapIndexed { index, step ->
+                if (index == 2) {
+                    (step as StepEntity.Step).copy(conditionDays = mondayOnly)
+                } else {
+                    step
+                }
+            }
+        )
+        val conditionedStepLength = (timer.steps[2] as StepEntity.Step).length
+
+        assertEquals(
+            timer.getMaxTotalTime() - timer.loop * conditionedStepLength,
+            timer.getMinTotalTime()
+        )
+    }
+
+    @Test
+    fun `getMinTotalTime treats an all-days-checked condition as unconditioned`() {
+        var timer = TestData.fakeTimerAdvanced
+        val steps = timer.steps
+        val everyDayChecked = List(7) { true }
+        val fridayOnly = List(7) { dayIndex -> dayIndex == FRIDAY }
+        timer = timer.copy(
+            steps = steps.mapIndexed { index, step ->
+                when (index) {
+                    0 -> (step as StepEntity.Step).copy(conditionDays = everyDayChecked)
+                    2 -> (step as StepEntity.Step).copy(conditionDays = fridayOnly)
+                    else -> step
+                }
+            }
+        )
+        val fridayOnlyStepLength = (timer.steps[2] as StepEntity.Step).length
+
+        assertEquals(
+            timer.getMaxTotalTime() - timer.loop * fridayOnlyStepLength,
+            timer.getMinTotalTime()
+        )
+    }
 }
+
+private const val MONDAY = 0
+private const val FRIDAY = 4
 
 private val step1 = StepEntity.Step("step1", 0L, listOf())
 private val step2 = StepEntity.Step("step2", 0L, listOf())
