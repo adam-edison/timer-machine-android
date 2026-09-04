@@ -33,6 +33,7 @@ import androidx.viewbinding.ViewBinding
 import com.github.deweyreed.tools.anko.longToast
 import com.github.deweyreed.tools.anko.toast
 import com.github.deweyreed.tools.arch.Event
+import com.github.deweyreed.tools.arch.observeEvent
 import com.github.deweyreed.tools.helper.createChooserIntentIfDead
 import com.github.deweyreed.tools.helper.getNonNullString
 import com.github.deweyreed.tools.helper.startActivityOrNothing
@@ -215,14 +216,27 @@ abstract class BaseOneFragment<T : ViewBinding>(
 
     protected fun actionNextStep() {
         if (viewModel.isCurrentStepQrLocked()) {
-            QrCodeScanner.scan(
-                activity = requireActivity(),
-                onSuccess = { code -> viewModel.onQrScanResult(code) },
-                onFailure = { error -> requireContext().toast(error.message.toString()) },
-            )
+            // The scanner already auto-launches when a QR_SCAN step starts
+            // (see setUpQrScanObserver); this is just a manual retry if that
+            // first attempt was cancelled or missed.
+            triggerQrScan()
             return
         }
         viewModel.onMove(1)
+    }
+
+    protected fun triggerQrScan() {
+        QrCodeScanner.scan(
+            activity = requireActivity(),
+            onSuccess = { code -> viewModel.onQrScanResult(code) },
+            onFailure = { error -> requireContext().toast(error.message.toString()) },
+        )
+    }
+
+    protected fun setUpQrScanObserver() {
+        viewModel.qrScanRequestEvent.observeEvent(viewLifecycleOwner) {
+            triggerQrScan()
+        }
     }
 
     protected fun actionJump(newIndex: TimerIndex) {

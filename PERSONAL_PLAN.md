@@ -416,39 +416,50 @@ Branch: `feat/qr-scan-dismiss`
 **What:** originally scoped as "a dismiss mode on HALT." Following the same
 lesson learned building item 2 (Confirm started as "add a nag interval to
 HALT" and turned out to need its own behavior) — this is its own behavior,
-**QR_SCAN**, not a HALT variant. A step with QR_SCAN counts down normally
-(other behaviors on it fire on their usual schedule), then — once the
-countdown ends — holds indefinitely and blocks the step from being left by
-any means except a matching scan. "Next" (notification action, running-screen
-action button, and the running screen's step-list jump-to-step) is disabled
-for the *whole step*, not just its post-countdown wait, since a normal
-countdown step already lets Next skip it early — QR_SCAN specifically
-removes that. Stopping the timer entirely (Reset) still always works.
+**QR_SCAN**, not a HALT variant. Unlike Confirm, QR_SCAN carries **no
+content or nag of its own** — it's a pure gate: this step can't be left
+(not by "Next", not by jumping to it from the step list, not by its own
+countdown finishing) until a scan matches. If you want a spoken reminder or
+a repeating nag while it waits, add Voice/Confirm/Beep alongside it — those
+already do that job, and reusing them beat inventing a second copy of the
+same fields. The scanner **launches automatically the instant the step
+starts** — no button press required — with "Next" (repurposed as a manual
+retry) as a fallback if that first launch is missed or cancelled. Stopping
+the timer entirely (Reset) still always works.
 
 **Design:**
-- `TerminalWaitTask` — `ConfirmTask` (item 2) generalized and renamed. The
-  "count down, then hold indefinitely, ticking a wait-alert callback once a
-  second" mechanics turned out to be exactly what QR_SCAN also needs; the
-  only thing that ever differed between Confirm and QR_SCAN is *how the wait
-  ends*, which was never the task's job — that's decided entirely outside
-  it, by whatever calls `TimerMachine.toIndex()`/`interfere()`. Reused the
-  same class instead of duplicating it. `TimerMachine.Listener.confirmAlert`
-  is now `terminalWaitAlert`, fired for either behavior.
-- New `BehaviourType.QR_SCAN`, `QrScanAction(nagIntervalSeconds, content,
-  savedCode)` — `nagIntervalSeconds`/`content` mirror `ConfirmAction`
-  exactly (same nag-replay semantics, same `{variable}`-aware spoken content
-  via `content2`/`VoiceVariableDialog`, for the same reason item 2's trap #3
-  applies here too). `savedCode` (`""` = accept any scanned code) needed a
-  third generic string slot — `BehaviourEntity` gained `str3` (`BehaviourData.extra`
-  in the JSON layer), the same kind of zero-migration addition as item 3's
-  `conditionDays`, since behaviours round-trip as JSON nested in a step, not
-  as their own Room columns.
-- **Three-way mutual exclusion, not just a pair.** HALT/CONFIRM/QR_SCAN all
-  claim "what happens when the step's countdown ends," so all three exclude
-  each other. `EditableBehaviourLayout`'s `mutuallyExclusiveBehaviourTypes`
-  was a `Map<BehaviourType, BehaviourType>` (one exclusion partner each,
-  enough for HALT↔CONFIRM) — widened to `Map<BehaviourType, Set<BehaviourType>>`
-  to support a third.
+- `QrScanAction(savedCode: String = "")` — one field. `""` accepts any
+  scanned code; a saved value requires an exact match. Round-trips through
+  `BehaviourEntity.str1`, no new generic column needed (tried adding a
+  `str3`/`extra` slot for a since-dropped nag/content pair, reverted it once
+  those fields turned out to be the wrong idea for this behaviour — worth
+  remembering `BehaviourEntity` still has one spare-slot's worth of room
+  free for whatever needs it next).
+- **QR_SCAN is orthogonal to HALT/CONFIRM, not a third exclusive option.**
+  First pass made all three mutually exclusive, on the theory that they all
+  "claim what happens when the countdown ends" — wrong, once QR_SCAN
+  dropped its own content/nag. It doesn't claim the wait/alert lifecycle at
+  all anymore, only *how you leave the step*, which is a genuinely
+  different axis: HALT (holds instantly) and CONFIRM (counts down, holds,
+  alerts, nags) still decide the wait; QR_SCAN, when present, just swaps
+  "Next" for "must scan" as the way out of whichever wait they picked. So
+  it's combinable with either. `EditableBehaviourLayout`'s
+  `mutuallyExclusiveBehaviourTypes` went back to the original HALT↔CONFIRM
+  pair.
+- **QR_SCAN alone still needs to hold the step open.** Without HALT or
+  CONFIRM, a step's countdown finishing auto-advances it — through
+  `TaskManager.onTaskDone`, a path the "Next" guard below doesn't touch at
+  all, since that guard only stops *manual* moves. A standalone QR_SCAN
+  step would otherwise scan-gate "Next" while auto-advancing anyway the
+  moment its timer hit zero. Fixed by giving QR_SCAN-alone the same
+  `TerminalWaitTask` used for Confirm, just with a no-op tick callback
+  (counts down normally, then holds silently — no alert, no nag, matching
+  "QR_SCAN carries none of its own"). `TerminalWaitTask` is `ConfirmTask`
+  (item 2) generalized and renamed, since the "count down, then hold
+  indefinitely, ticking an optional per-second callback" mechanics are
+  identical either way — only *how the hold ends* differs, and that was
+  never the task's job regardless. `TimerMachine.Listener.confirmAlert` is
+  now `terminalWaitAlert`, called only for Confirm.
 - **The scanner: Play Services' Code Scanner API, not a hand-rolled CameraX
   screen.** The original plan text called for "a new full-screen scan
   screen" + `CAMERA` permission + on-device ML Kit. Turns out
@@ -458,10 +469,8 @@ removes that. Stopping the timer entirely (Reset) still always works.
   `component-key`) — no custom Activity, no CameraX pipeline, and **no
   `CAMERA` permission of our own to declare**, since the scanner module
   handles its own camera access in its own process. Genuinely on-device
-  (no network round-trip per scan). This is a real scope reduction from
-  what the plan originally called for, discovered while building, not a
-  compromise — reused for both "register a required code" (editor) and
-  "scan to dismiss" (running screen).
+  (no network round-trip per scan). Reused for both "register a required
+  code" (editor) and "scan to dismiss" (running screen).
 - **The block covers Next/Previous/jump, not just Next — found a real
   bypass while designing it.** The running screen's step list can jump
   straight to any step mid-run (`OneViewModel.onJump` → `moveTimer`) —
@@ -475,41 +484,49 @@ removes that. Stopping the timer entirely (Reset) still always works.
   reading of the request, and simpler than a Next-only carve-out).
   `MachinePresenter.advancePastQrScan()` is the one path that bypasses this
   guard — called only after a scan is confirmed to match.
-- Running screen: the "Next" action button (`BaseOneFragment.actionNextStep`)
-  checks `OneViewModel.isCurrentStepQrLocked()` and, when true, launches the
-  scanner directly instead of calling `onMove(1)` — so the button stays
-  meaningfully functional (repurposed as "Scan") rather than going dead.
-  `OneViewModel.onQrScanResult(code)` checks the scan against the step's
-  `QrScanAction`, and either sends the same `qrScanSuccessIntent` action
-  the notification/service layer defines, or shows a "wrong code" message
-  and leaves the step locked.
+- **Auto-launch, not a repurposed button.** `TimerMachine.Listener.started`
+  already fires once per step transition (`OneViewModel.started()`) — added
+  a `qrScanRequestEvent` there, fired whenever the step that just started
+  carries QR_SCAN. `OneFragment` observes it (`BaseOneFragment.setUpQrScanObserver`)
+  and launches the scanner immediately, no tap needed. Since `moveTimer`
+  can't advance a QR_SCAN step regardless of whether its countdown has
+  finished, a fast scan can clear the step early — same as any step's
+  countdown always being skippable by "Next", just gated on a scan instead.
+  "Next" (`BaseOneFragment.actionNextStep`, via `viewModel.isCurrentStepQrLocked()`)
+  still triggers the same scan on tap, as the manual retry if the
+  auto-launch was missed, cancelled, or the running screen wasn't open yet
+  when the step started. `OneViewModel.onQrScanResult(code)` checks the
+  scan against the step's `QrScanAction`, and either sends the same
+  `qrScanSuccessIntent` action the notification/service layer defines, or
+  shows a "wrong code" message and leaves the step locked (no auto-retry on
+  a mismatch — avoids a relaunch loop; the user retries via "Next").
 - Notification: the persistent running notification's "Next" action is
   omitted entirely (not just left to silently no-op) while the current step
   is QR-locked — `MachineNotif.TimerNotif.withStartEvent` now computes and
   threads an `isQrLocked` flag into `buildTimerNotificationBuilder`, since a
-  bare notification tap can't itself launch an interactive camera scan.
+  bare notification tap can't itself launch an interactive camera scan (and
+  can't auto-launch one either — Android blocks background activity starts).
 - **Known gaps, scoped out rather than silently left broken:** the floating
   overlay timer's Next button and the pre-Android-U non-fullscreen SCREEN
-  heads-up notification's Next action are not scan-aware — tapping either
-  while QR-locked is a harmless no-op (the `moveTimer` guard still applies)
-  but neither offers a way to trigger a scan from there. Both are secondary
-  surfaces (the overlay lacks a ready Activity context for the scanner; the
-  heads-up path only matters pre-Android 14). Revisit if this turns out to
-  matter in practice.
+  heads-up notification's Next action are not scan-aware, and neither
+  triggers the auto-launch (it's wired to `OneFragment` specifically) —
+  tapping/reaching either while QR-locked is a harmless no-op (the
+  `moveTimer` guard still applies). Both are secondary surfaces (the
+  overlay lacks a ready Activity context for the scanner; the heads-up path
+  only matters pre-Android 14). Revisit if this turns out to matter.
 
-**Touches:** `BehaviourEntity.kt`/`domain` (`QR_SCAN`, `QrScanAction`, `str3`)
-· `BehaviourData.kt` + `BehaviourMapper.kt`/`data` (`extra` field) ·
+**Touches:** `BehaviourEntity.kt`/`domain` (`QR_SCAN`, `QrScanAction`) ·
 `presentation/.../task/TerminalWaitTask.kt` (renamed+generalized from
 `ConfirmTask.kt`) · `TimerMachine.kt` (dispatch, `terminalWaitAlert`) ·
-`MachinePresenter.kt` (`terminalWaitAlert` QR_SCAN block, `isCurrentStepQrLocked`,
-guarded `moveTimer`, new `advancePastQrScan`) · `MachineContract.kt` +
-`StreamMachineIntentProvider.kt` + `MachineService.kt` + `OtherModule.kt`
-(new `advancePastQrScan`/`qrScanSuccessIntent` plumbing, mirroring `increTimer`) ·
-`OneViewModel.kt` (`isCurrentStepQrLocked`, `onQrScanResult`) ·
-`BaseOneFragment.kt` (Next button repurposed to scan) · `MachineNotif.kt` +
-`NotificationBuilders.kt` (omit Next while locked) · new
-`component-key/.../QrCodeScanner.kt` (Play Services scanner wrapper) ·
-`EditableBehaviourLayout.kt` (3-way mutual exclusion) ·
+`MachinePresenter.kt` (`isCurrentStepQrLocked`, guarded `moveTimer`, new
+`advancePastQrScan`) · `MachineContract.kt` + `StreamMachineIntentProvider.kt`
++ `MachineService.kt` + `OtherModule.kt` (new
+`advancePastQrScan`/`qrScanSuccessIntent` plumbing, mirroring `increTimer`) ·
+`OneViewModel.kt` (`isCurrentStepQrLocked`, `onQrScanResult`,
+`qrScanRequestEvent` fired from `started()`) · `BaseOneFragment.kt` +
+`OneFragment.kt` (auto-launch observer, Next repurposed as manual retry) ·
+`MachineNotif.kt` + `NotificationBuilders.kt` (omit Next while locked) ·
+new `component-key/.../QrCodeScanner.kt` (Play Services scanner wrapper) ·
 `BehaviourTypeUtils.kt`/`BehaviourLayoutUtils.kt` (icon/name/desp/chip text)
 · new `ic_qr_code.xml` · `BehaviourSettingsView.kt` (`addQrScanItems`, reused
 by both `UpdateStepDialog.kt` and `EditActivity.kt` per item 2's trap #2) ·
@@ -527,24 +544,28 @@ code). Full build (`assemblePersonalDebug`), all module unit tests, and
 files, untouched this branch) were left alone as out of scope.
 
 **Effort:** landed close to the original 2–4 day estimate despite dropping
-the CameraX/permission work, since the three-way mutual exclusion, the
-`ConfirmTask`→`TerminalWaitTask` generalization, and closing the jump-bypass
-took roughly the time the scanning UI would have.
+the CameraX/permission work, since correcting the design after manual
+testing (dropping QR_SCAN's own nag/content, un-exclusive-ing it from
+HALT/CONFIRM, auto-launching instead of requiring "Next") cost roughly the
+time the scanning UI would have.
 
-**Status:** built, not yet merged — needs an on-device manual test (camera
-scanning can't be verified without a physical device) before merging into
-`personal`.
+**Status:** built, deployed to a physical device for manual testing, not
+yet merged into `personal`.
 
-**Manual test:** _(fill in after on-device testing — confirm: a QR_SCAN step
-counts down normally with its other behaviors firing on schedule; once it
-reaches zero it holds and plays its alert, repeating per the nag interval;
-"Next" on the running screen launches the scanner instead of advancing;
-scanning the right code (or any code, if none is saved) advances normally;
-scanning a mismatched code shows the wrong-code message and stays locked;
-the persistent notification has no "Next" action while locked, and its
-other actions (Pause/+1 min) still work; Reset always stops the timer
+**Manual test:** _(fill in after on-device testing — confirm: a standalone
+QR_SCAN step's scanner auto-launches the moment the step starts, holds
+(no alert/nag of its own) until a matching scan, and "Next"/jumping to it/
+its own countdown finishing all fail to advance it; QR_SCAN combined with
+Confirm still gets Confirm's countdown-then-hold-with-alert-and-nag, but
+only a scan (not "Next") dismisses it; QR_SCAN combined with HALT holds
+instantly as HALT always has, again only dismissed by a scan; scanning the
+right code (or any code, if none is saved) advances immediately even before
+a standalone step's countdown finishes; scanning a mismatched code shows
+the wrong-code message and stays locked, with "Next" available as a manual
+retry; the persistent notification has no "Next" action while locked, and
+its other actions (Pause/+1 min) still work; Reset always stops the timer
 regardless of lock state; registering a required code from the editor via
-"Set from a scan" round-trips correctly on save/reload)_
+the "Required Code" item round-trips correctly on save/reload)_
 
 ## 6. Searchable step-level activity log
 

@@ -203,54 +203,9 @@ internal fun MaterialPopupMenuBuilder.addConfirmItems(
 internal fun MaterialPopupMenuBuilder.addQrScanItems(
     context: Context,
     action: QrScanAction,
-    onNagIntervalSeconds: (Int) -> Unit,
-    onContent: (String) -> Unit,
     onScanToSetSavedCode: () -> Unit,
     onClearSavedCode: () -> Unit,
 ) {
-    section {
-        item {
-            label = context.getString(RBase.string.voice_content_title)
-            callback = {
-                // Same reasoning as Confirm: always go through content2/VoiceVariableDialog
-                // so {variable} tokens in the default content are understood. See
-                // TimerMachineHelper.generateVoiceContent.
-                VoiceVariableDialog(context).show(
-                    initialAction = VoiceAction(
-                        content2 = action.content.ifBlank { QrScanAction.DEFAULT_CONTENT }
-                    ),
-                    onGet = onContent,
-                    onGet2 = onContent,
-                )
-            }
-        }
-        item {
-            label = "${context.getString(RBase.string.qr_scan_nag_interval)}: ${action.nagIntervalSeconds}"
-            callback = {
-                SimpleInputDialog(context).show(
-                    titleRes = RBase.string.qr_scan_nag_interval,
-                    preFill = action.nagIntervalSeconds.toString(),
-                    inputType = InputType.TYPE_CLASS_NUMBER,
-                    message = buildSpannedString {
-                        val gapWidth = context.dimen(RBase.dimen.bullet_span_gap_width)
-                        append(
-                            context.getString(RBase.string.qr_scan_nag_interval_desp_usage),
-                            BulletSpan(gapWidth),
-                            Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
-                        )
-                        appendLine()
-                        append(
-                            context.getString(RBase.string.qr_scan_nag_interval_desp_0_meaning),
-                            BulletSpan(gapWidth),
-                            Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
-                        )
-                    },
-                ) {
-                    onNagIntervalSeconds.invoke(it.toIntOrNull() ?: 0)
-                }
-            }
-        }
-    }
     section {
         item {
             label = "${context.getString(RBase.string.qr_scan_saved_code_title)}: " +

@@ -6,7 +6,6 @@ import xyz.aprildown.timer.domain.entities.TimerEntity
 import xyz.aprildown.timer.domain.entities.toConfirmAction
 import xyz.aprildown.timer.domain.entities.toCountAction
 import xyz.aprildown.timer.domain.entities.toHalfAction
-import xyz.aprildown.timer.domain.entities.toQrScanAction
 import xyz.aprildown.timer.presentation.stream.task.CountDownTimerTask
 import xyz.aprildown.timer.presentation.stream.task.StopwatchTask
 import xyz.aprildown.timer.presentation.stream.task.Task
@@ -37,8 +36,9 @@ internal class TimerMachine(
         fun countRead(content: String)
 
         /**
-         * Called when a CONFIRM or QR_SCAN step's terminal wait begins, and again on every
-         * nag interval while it continues to wait.
+         * Called when a CONFIRM step's terminal wait begins, and again on every nag interval
+         * while it continues to wait. QR_SCAN has no alert/nag of its own — see
+         * [xyz.aprildown.timer.presentation.stream.task.TerminalWaitTask] usage in [toTask].
          */
         fun terminalWaitAlert(timerId: Int, index: TimerIndex)
     }
@@ -148,17 +148,16 @@ internal class TimerMachine(
     private fun StepEntity.Step.toTask(useTtsNextStep: Boolean = false): Task {
         val behaviour = behaviour
         val countUp = behaviour.find { it.type == BehaviourType.HALT } != null
-        val terminalWaitBehaviour = behaviour.find {
-            it.type == BehaviourType.CONFIRM || it.type == BehaviourType.QR_SCAN
-        }
+        val confirmBehaviour = behaviour.find { it.type == BehaviourType.CONFIRM }
+        // QR_SCAN is an orthogonal "how do you leave this step" gate (enforced separately,
+        // in MachinePresenter's move guard) — it doesn't pick the task by itself except when
+        // it's the *only* terminal-timing behaviour present: without HALT or CONFIRM to hold
+        // the step open, a plain countdown would finish and auto-advance right past the gate.
+        val qrScanBehaviour = behaviour.find { it.type == BehaviourType.QR_SCAN }
 
         val task = when {
-            terminalWaitBehaviour != null -> {
-                val nagIntervalSeconds = when (terminalWaitBehaviour.type) {
-                    BehaviourType.CONFIRM -> terminalWaitBehaviour.toConfirmAction().nagIntervalSeconds
-                    BehaviourType.QR_SCAN -> terminalWaitBehaviour.toQrScanAction().nagIntervalSeconds
-                    else -> error("Unreachable: $terminalWaitBehaviour")
-                }
+            confirmBehaviour != null -> {
+                val action = confirmBehaviour.toConfirmAction()
                 TerminalWaitTask(
                     master = this@TimerMachine,
                     countDownTime = length,
@@ -166,8 +165,8 @@ internal class TimerMachine(
                         val elapsedSeconds = elapsedMillis / 1000
                         val shouldAlert = elapsedSeconds == 0L ||
                             (
-                                nagIntervalSeconds > 0 &&
-                                    elapsedSeconds % nagIntervalSeconds == 0L
+                                action.nagIntervalSeconds > 0 &&
+                                    elapsedSeconds % action.nagIntervalSeconds == 0L
                                 )
                         if (shouldAlert) {
                             listener.terminalWaitAlert(timerId, currentIndex)
@@ -176,6 +175,11 @@ internal class TimerMachine(
                 )
             }
             countUp -> StopwatchTask(master = this@TimerMachine)
+            qrScanBehaviour != null -> TerminalWaitTask(
+                master = this@TimerMachine,
+                countDownTime = length,
+                onWaitTick = {},
+            )
             else -> CountDownTimerTask(master = this@TimerMachine, countDownTime = length).apply {
                 if (useTtsNextStep) {
                     addTickListener(WarmUpTtsListener(warmUp = { listener.countRead("") }))

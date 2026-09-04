@@ -14,7 +14,6 @@ import xyz.aprildown.timer.domain.entities.BehaviourType
 import xyz.aprildown.timer.domain.entities.ConfirmAction
 import xyz.aprildown.timer.domain.entities.FolderEntity
 import xyz.aprildown.timer.domain.entities.HalfAction
-import xyz.aprildown.timer.domain.entities.QrScanAction
 import xyz.aprildown.timer.domain.entities.StepType
 import xyz.aprildown.timer.domain.entities.TimerEntity
 import xyz.aprildown.timer.domain.entities.TimerStampEntity
@@ -26,7 +25,6 @@ import xyz.aprildown.timer.domain.entities.toCountAction
 import xyz.aprildown.timer.domain.entities.toFlashlightAction
 import xyz.aprildown.timer.domain.entities.toMusicAction
 import xyz.aprildown.timer.domain.entities.toNotificationAction
-import xyz.aprildown.timer.domain.entities.toQrScanAction
 import xyz.aprildown.timer.domain.entities.toScreenAction
 import xyz.aprildown.timer.domain.entities.toVibrationAction
 import xyz.aprildown.timer.domain.entities.toVoiceAction
@@ -699,18 +697,5 @@ class MachinePresenter @Inject constructor(
             )
         }
 
-        stepBehaviours.find { it.type == BehaviourType.QR_SCAN }?.let { behavior ->
-            val action = behavior.toQrScanAction()
-            view?.beginReading(
-                content = VoiceAction(content2 = action.content.ifBlank { QrScanAction.DEFAULT_CONTENT })
-                    .generateVoiceContent(
-                        timer = timer,
-                        currentStep = currentStep,
-                        index = index,
-                        timeFormatter = viewTimeFormatter(),
-                    ),
-                sayMore = false,
-            )
-        }
     }
 }

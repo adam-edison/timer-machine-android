@@ -9,18 +9,14 @@ class BehaviourEntityKtTest {
 
     @Test
     fun `QrScanAction round-trips through BehaviourEntity`() {
-        val action = QrScanAction(
-            nagIntervalSeconds = 30,
-            content = "Scan to continue",
-            savedCode = "my-secret-code",
-        )
+        val action = QrScanAction(savedCode = "my-secret-code")
 
         assertEquals(action, action.toBehaviourEntity().toQrScanAction())
     }
 
     @Test
-    fun `QrScanAction with no nag interval round-trips to zero`() {
-        val action = QrScanAction(nagIntervalSeconds = 0)
+    fun `QrScanAction with a blank saved code round-trips too`() {
+        val action = QrScanAction(savedCode = "")
 
         assertEquals(action, action.toBehaviourEntity().toQrScanAction())
     }

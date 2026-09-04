@@ -74,6 +74,8 @@ class OneViewModel @Inject constructor(
     val intentEvent: LiveData<Event<Intent>> = _intentEvent
     private val _finishEvent = MutableLiveData<Event<Unit>>()
     val finishEvent: LiveData<Event<Unit>> = _finishEvent
+    private val _qrScanRequestEvent = MutableLiveData<Event<Unit>>()
+    val qrScanRequestEvent: LiveData<Event<Unit>> = _qrScanRequestEvent
 
     private var presenter: MachineContract.Presenter? = null
 
@@ -322,6 +324,10 @@ class OneViewModel @Inject constructor(
         timerStepTime = timer.value?.getStep(index)?.length ?: 0L
         elapsedBaseTime = timer.value?.getTimeBeforeIndex(index) ?: 0L
         elapsedCurrentTime.value = 0L
+
+        if (isCurrentStepQrLocked()) {
+            _qrScanRequestEvent.value = Event(Unit)
+        }
     }
 
     override fun paused(timerId: Int) {

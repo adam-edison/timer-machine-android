@@ -58,16 +58,10 @@ internal fun BehaviourEntity.getChipText(context: Context): String {
         }
         BehaviourType.QR_SCAN -> {
             val action = toQrScanAction()
-            buildString {
-                append(getDefaultName())
-                if (action.nagIntervalSeconds > 0) {
-                    append(" ")
-                    append(action.nagIntervalSeconds)
-                }
-                if (action.savedCode.isNotBlank()) {
-                    append(" ")
-                    append(context.getString(RBase.string.qr_scan_saved_code_title))
-                }
+            if (action.savedCode.isNotBlank()) {
+                "${getDefaultName()} ${context.getString(RBase.string.qr_scan_saved_code_title)}"
+            } else {
+                null
             }
         }
         BehaviourType.HALF -> {

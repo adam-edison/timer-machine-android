@@ -285,17 +285,6 @@ class UpdateStepDialog :
                     addQrScanItems(
                         context = context,
                         action = current.toQrScanAction(),
-                        onNagIntervalSeconds = { newInterval ->
-                            changeBehaviour(BehaviourType.QR_SCAN) {
-                                it.toQrScanAction().copy(nagIntervalSeconds = newInterval)
-                                    .toBehaviourEntity()
-                            }
-                        },
-                        onContent = { newContent ->
-                            changeBehaviour(BehaviourType.QR_SCAN) {
-                                it.toQrScanAction().copy(content = newContent).toBehaviourEntity()
-                            }
-                        },
                         onScanToSetSavedCode = {
                             QrCodeScanner.scan(
                                 activity = requireActivity(),

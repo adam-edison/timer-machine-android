@@ -13,8 +13,7 @@ internal class BehaviourMapper @Inject constructor() : Mapper<BehaviourData, Beh
             type = from.type,
             str1 = from.label,
             str2 = from.content,
-            bool = from.loop,
-            str3 = from.extra
+            bool = from.loop
         )
     }
 
@@ -23,8 +22,7 @@ internal class BehaviourMapper @Inject constructor() : Mapper<BehaviourData, Beh
             type = from.type,
             label = from.str1,
             content = from.str2,
-            loop = from.bool,
-            extra = from.str3
+            loop = from.bool
         )
     }
 }

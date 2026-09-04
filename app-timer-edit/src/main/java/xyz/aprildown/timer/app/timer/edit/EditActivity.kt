@@ -804,17 +804,6 @@ class EditActivity :
                     addQrScanItems(
                         context = this@EditActivity,
                         action = current.toQrScanAction(),
-                        onNagIntervalSeconds = { newInterval ->
-                            changeBehaviour(BehaviourType.QR_SCAN, position) {
-                                it.toQrScanAction().copy(nagIntervalSeconds = newInterval)
-                                    .toBehaviourEntity()
-                            }
-                        },
-                        onContent = { newContent ->
-                            changeBehaviour(BehaviourType.QR_SCAN, position) {
-                                it.toQrScanAction().copy(content = newContent).toBehaviourEntity()
-                            }
-                        },
                         onScanToSetSavedCode = {
                             QrCodeScanner.scan(
                                 activity = this@EditActivity,

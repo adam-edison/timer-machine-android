@@ -50,6 +50,7 @@ class OneFragment :
         setUpViews(binding)
         applySettings(binding)
         setUpObservers(binding)
+        setUpQrScanObserver()
     }
 
     private fun setUpViews(binding: FragmentOneBinding) {
