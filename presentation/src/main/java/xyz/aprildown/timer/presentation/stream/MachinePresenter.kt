@@ -14,6 +14,7 @@ import xyz.aprildown.timer.domain.entities.BehaviourType
 import xyz.aprildown.timer.domain.entities.ConfirmAction
 import xyz.aprildown.timer.domain.entities.FolderEntity
 import xyz.aprildown.timer.domain.entities.HalfAction
+import xyz.aprildown.timer.domain.entities.QrScanAction
 import xyz.aprildown.timer.domain.entities.StepType
 import xyz.aprildown.timer.domain.entities.TimerEntity
 import xyz.aprildown.timer.domain.entities.TimerStampEntity
@@ -166,34 +167,53 @@ class MachinePresenter @Inject constructor(
         timers[timerId]?.machine?.pause()
     }
 
-    /**
-     * True while the timer's currently active step carries QR_SCAN — the step holds
-     * indefinitely once its countdown ends, and only a successful scan
-     * ([advancePastQrScan]) may move off it. Applies to the whole step (not just its
-     * post-countdown wait), so "Next"/"Previous"/jump-to-step are all blocked, closing
-     * the running screen's step-list jump as a bypass, not only the Next action.
-     */
-    private fun isCurrentStepQrLocked(timerId: Int): Boolean {
-        val (timer, machine) = timers[timerId] ?: return false
-        val step = timer.getStep(machine.currentIndex) ?: return false
-        val action = step.behaviour
-            .find { it.type == BehaviourType.QR_SCAN }
-            ?.toQrScanAction()
-            ?: return false
+    private fun currentQrScanAction(timerId: Int): QrScanAction? {
+        val (timer, machine) = timers[timerId] ?: return null
+        val step = timer.getStep(machine.currentIndex) ?: return null
+        return step.behaviour.find { it.type == BehaviourType.QR_SCAN }?.toQrScanAction()
+    }
 
-        if (action.emergencyExitSeconds <= 0) return true
-
-        // Elapsed time since the step's nominal end — null (still counting down, i.e.
-        // before the nominal end) or a StopwatchTask's currentTime (a HALT step has no
-        // countdown, so its "nominal end" is immediate — currentTime already counts up
-        // from that point) both mean the emergency exit hasn't started counting yet.
-        val elapsedPastNominalEnd = when (val task = machine.currentTask) {
+    // Elapsed time since the step's nominal end — null means still counting down (i.e.
+    // before the nominal end). A StopwatchTask's currentTime (a HALT step has no
+    // countdown, so its "nominal end" is immediate — currentTime already counts up from
+    // that point) is never null once the task exists, so HALT is never "still counting".
+    private fun elapsedMillisPastQrScanNominalEnd(timerId: Int): Long? {
+        return when (val task = timers[timerId]?.machine?.currentTask) {
             is TerminalWaitTask -> task.elapsedSinceWaitBegan
             is StopwatchTask -> task.currentTime
             else -> null
-        } ?: return true
+        }
+    }
 
+    /**
+     * True while the timer's currently active step carries QR_SCAN — the step holds
+     * indefinitely once its countdown ends, and only a successful scan
+     * ([advancePastQrScan]) may move off it, unless an emergency exit has elapsed.
+     * Applies to the whole step (not just its post-countdown wait), so
+     * "Next"/"Previous"/jump-to-step are all blocked, closing the running screen's
+     * step-list jump as a bypass, not only the Next action.
+     */
+    override fun isCurrentStepQrLocked(timerId: Int): Boolean {
+        val action = currentQrScanAction(timerId) ?: return false
+        if (action.emergencyExitSeconds <= 0) return true
+        val elapsedPastNominalEnd = elapsedMillisPastQrScanNominalEnd(timerId) ?: return true
         return elapsedPastNominalEnd < action.emergencyExitSeconds * 1_000L
+    }
+
+    /**
+     * Seconds left until "Next" starts working again without a scan, or null if there's no
+     * QR_SCAN step active, no emergency exit configured for it, or it's already available.
+     */
+    override fun secondsUntilQrScanEmergencyExit(timerId: Int): Int? {
+        val action = currentQrScanAction(timerId) ?: return null
+        if (action.emergencyExitSeconds <= 0) return null
+        // null here (not yet past the step's nominal end) deliberately returns null too,
+        // not the full emergencyExitSeconds — a static, non-decreasing number shown for
+        // the whole initial countdown would look broken/stuck, not informative.
+        val elapsedPastNominalEnd = elapsedMillisPastQrScanNominalEnd(timerId) ?: return null
+        val remainingMillis = action.emergencyExitSeconds * 1_000L - elapsedPastNominalEnd
+        if (remainingMillis <= 0) return null
+        return (remainingMillis / 1_000L).toInt()
     }
 
     override fun moveTimer(timerId: Int, index: TimerIndex) {

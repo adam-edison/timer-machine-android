@@ -571,6 +571,45 @@ the timer entirely (Reset) still always works.
   won't reappear once the emergency window opens without reopening the app
   first, since nothing periodically rebuilds it. Acceptable for a fallback
   meant to be used by opening the app anyway.
+- **Bug found immediately in testing: emergency exit elapsing didn't
+  actually unblock "Next".** The lock check existed in two places —
+  `MachinePresenter.isCurrentStepQrLocked()` (the real, time-aware guard
+  used by `moveTimer` etc.) and a second, separate, non-time-aware copy in
+  `OneViewModel.isCurrentStepQrLocked()` (a plain "does this step have
+  QR_SCAN" check, used by `actionNextStep()` to decide whether tapping
+  "Next" should launch the scanner or actually advance). Only the first one
+  was made time-aware — the second kept saying "locked" forever, so
+  `actionNextStep()` never even tried to advance once the emergency exit
+  had elapsed; it just kept relaunching the scanner. Jumping to a step
+  directly in the step list bypassed this stale check entirely (it goes
+  straight to `moveTimer`), which is why that was the only thing that
+  worked. Fixed by deleting the duplicate: `isCurrentStepQrLocked` moved
+  onto `MachineContract.Presenter` as the one source of truth, and
+  `OneViewModel` now just delegates to it.
+- **Visible countdown, not just a silent unlock.** Requested after testing
+  the emergency exit blind — "the emergency escape button with countdown
+  on the scanning screen or something." The actual camera scan UI is
+  Google's own sealed Play Services screen — nothing can be added to it —
+  so the countdown lives on the running screen instead, appended to the
+  step name text ("Pushups — escape in 45s") while it's actively ticking,
+  vanishing once available (no separate "now available" message — the
+  suffix disappearing is the signal, and "Next" already silently works by
+  then). New `MachinePresenter.secondsUntilQrScanEmergencyExit()`
+  (refactored to share `currentQrScanAction`/
+  `elapsedMillisPastQrScanNominalEnd` with `isCurrentStepQrLocked`) returns
+  null for "no suffix should show" — deliberately covering four different
+  reasons (no QR_SCAN, no emergency exit configured, still before the
+  step's nominal end, or already past the threshold) with one value, since
+  the UI treatment for all four is identical: don't show a countdown.
+  Returning the full `emergencyExitSeconds` during the initial countdown
+  (before the wait phase even begins) was tried and reverted — a static,
+  non-decrementing number for the whole step would look stuck/broken, not
+  informative. `OneViewModel.qrScanEmergencyExitSeconds` refreshes every
+  tick (`updated()`) plus on `started()`/attach, and `OneFragment` recomputes
+  the combined step-name text on any of timer/index/countdown changing —
+  reusing the existing step-name `TextView` rather than adding new views to
+  `fragment_one.xml`'s already-dense top-info constraint chain, to avoid
+  risking a layout regression under time pressure.
 - Notification: the persistent running notification's "Next" action is
   omitted entirely (not just left to silently no-op) while the current step
   is QR-locked — `MachineNotif.TimerNotif.withStartEvent` now computes and

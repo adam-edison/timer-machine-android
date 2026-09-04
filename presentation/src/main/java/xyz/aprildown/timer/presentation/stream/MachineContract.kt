@@ -120,6 +120,23 @@ interface MachineContract {
          */
         fun getTimerStateInfo(id: Int): CurrentTimerInfo?
 
+        /**
+         * True while the timer's currently active step carries QR_SCAN and — if it has an
+         * emergency exit configured — that many seconds haven't yet passed since the step's
+         * nominal end. The single source of truth for whether "Next" is currently blocked;
+         * callers must not reimplement this check, since it depends on live task state
+         * (elapsed time) this interface doesn't otherwise expose.
+         */
+        fun isCurrentStepQrLocked(timerId: Int): Boolean
+
+        /**
+         * Seconds left until "Next" starts working again without a scan, or null if
+         * there's no QR_SCAN step active, no emergency exit configured for it, its
+         * countdown hasn't started yet (still before the step's nominal end), or it's
+         * already available.
+         */
+        fun secondsUntilQrScanEmergencyExit(timerId: Int): Int?
+
         fun startTimer(timerId: Int, index: TimerIndex? = null)
         fun pauseTimer(timerId: Int)
         fun moveTimer(timerId: Int, index: TimerIndex)
