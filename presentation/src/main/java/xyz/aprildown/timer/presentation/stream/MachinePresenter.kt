@@ -85,7 +85,16 @@ class MachinePresenter @Inject constructor(
     }
 
     override fun addListener(timerId: Int, listener: TimerMachineListener) {
+        val hadNoListeners = listeners[timerId].isNullOrEmpty()
         listeners.getOrPut(timerId) { mutableListOf() }.add(listener)
+
+        // Someone's now watching a QR-locked step that had nobody watching when it started
+        // (that's the only situation launchQrScanScreen's notification gets posted for) —
+        // it's served its purpose, dismiss it rather than leaving it stuck since nothing
+        // else re-checks "is anyone watching" once a step is already under way.
+        if (hadNoListeners && isCurrentStepQrLocked(timerId)) {
+            view?.closeQrScanScreen()
+        }
     }
 
     override fun removeListener(timerId: Int, listener: TimerMachineListener) {

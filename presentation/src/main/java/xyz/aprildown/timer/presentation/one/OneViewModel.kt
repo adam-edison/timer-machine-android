@@ -77,6 +77,14 @@ class OneViewModel @Inject constructor(
     private val _qrScanRequestEvent = MutableLiveData<Event<Unit>>()
     val qrScanRequestEvent: LiveData<Event<Unit>> = _qrScanRequestEvent
 
+    // The scanner itself backgrounds this screen while it's up, so returning from a scan
+    // attempt (success, cancel, or failure) re-runs the bind → attachPresenter() →
+    // setTimerItem() path (BaseOneFragment binds to MachineService in onStart). Without this,
+    // that would fire qrScanRequestEvent again on every single return trip, auto-relaunching
+    // the scanner in an unbreakable loop for as long as the step stays locked. Track the last
+    // index actually auto-launched for and only fire again once the step genuinely changes.
+    private var lastAutoLaunchedQrScanIndex: TimerIndex? = null
+
     private var presenter: MachineContract.Presenter? = null
 
     fun setTimerId(newTimerId: Int) {
@@ -305,7 +313,14 @@ class OneViewModel @Inject constructor(
         // started from the timer list rather than by opening this running screen first, so
         // started() (and its own qrScanRequestEvent trigger) already fired before this
         // ViewModel/listener even existed to hear it.
-        if (state == StreamState.RUNNING && isCurrentStepQrLocked()) {
+        if (state == StreamState.RUNNING) {
+            requestQrScanIfNeeded(index)
+        }
+    }
+
+    private fun requestQrScanIfNeeded(index: TimerIndex) {
+        if (isCurrentStepQrLocked() && lastAutoLaunchedQrScanIndex != index) {
+            lastAutoLaunchedQrScanIndex = index
             _qrScanRequestEvent.value = Event(Unit)
         }
     }
@@ -333,9 +348,7 @@ class OneViewModel @Inject constructor(
         elapsedBaseTime = timer.value?.getTimeBeforeIndex(index) ?: 0L
         elapsedCurrentTime.value = 0L
 
-        if (isCurrentStepQrLocked()) {
-            _qrScanRequestEvent.value = Event(Unit)
-        }
+        requestQrScanIfNeeded(index)
     }
 
     override fun paused(timerId: Int) {
