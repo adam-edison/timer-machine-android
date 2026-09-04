@@ -163,6 +163,12 @@
     <string name="behaviour_halt">Halt</string>
     <string name="behaviour_halt_help">Stay at the step until you move on manually, and make it forward-timing</string>
 
+    <string name="behaviour_confirm">Confirm</string>
+    <string name="behaviour_confirm_help">Count down normally, then wait for you to manually move on before continuing</string>
+    <string name="confirm_nag_interval">Nag Interval</string>
+    <string name="confirm_nag_interval_desp_usage">Enter the number of seconds between replays of this step\'s voice/beep while waiting for you to confirm</string>
+    <string name="confirm_nag_interval_desp_0_meaning">0 to only play once, when confirmation is needed</string>
+
     <string name="behaviour_voice">Voice</string>
     <string name="behaviour_voice_help">Read this step name</string>
     <string name="voice_content_title">Talking Content</string>

@@ -8,6 +8,7 @@ import xyz.aprildown.timer.domain.entities.HalfAction
 import xyz.aprildown.timer.domain.entities.SkipAction
 import xyz.aprildown.timer.domain.entities.VibrationAction
 import xyz.aprildown.timer.domain.entities.toBeepAction
+import xyz.aprildown.timer.domain.entities.toConfirmAction
 import xyz.aprildown.timer.domain.entities.toCountAction
 import xyz.aprildown.timer.domain.entities.toHalfAction
 import xyz.aprildown.timer.domain.entities.toMusicAction
@@ -49,6 +50,10 @@ internal fun BehaviourEntity.getChipText(context: Context): String {
         BehaviourType.BEEP -> {
             val count = toBeepAction().count
             if (count > 0) "${getDefaultName()} $count" else null
+        }
+        BehaviourType.CONFIRM -> {
+            val nagIntervalSeconds = toConfirmAction().nagIntervalSeconds
+            if (nagIntervalSeconds > 0) "${getDefaultName()} $nagIntervalSeconds" else null
         }
         BehaviourType.HALF -> {
             val option = toHalfAction().option

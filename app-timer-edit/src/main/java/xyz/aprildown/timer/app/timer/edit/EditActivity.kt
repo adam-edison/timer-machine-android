@@ -62,6 +62,7 @@ import xyz.aprildown.timer.domain.entities.StepEntity
 import xyz.aprildown.timer.domain.entities.StepType
 import xyz.aprildown.timer.domain.entities.TimerEntity
 import xyz.aprildown.timer.domain.entities.toBeepAction
+import xyz.aprildown.timer.domain.entities.toConfirmAction
 import xyz.aprildown.timer.domain.entities.toCountAction
 import xyz.aprildown.timer.domain.entities.toHalfAction
 import xyz.aprildown.timer.domain.entities.toImageAction
@@ -763,6 +764,23 @@ class EditActivity :
                             changeBehaviour(BehaviourType.BEEP, position) {
                                 it.toBeepAction().copy(respectOtherSound = isChecked)
                                     .toBehaviourEntity()
+                            }
+                        }
+                    )
+                }
+                BehaviourType.CONFIRM -> {
+                    addConfirmItems(
+                        context = this@EditActivity,
+                        action = current.toConfirmAction(),
+                        onNagIntervalSeconds = { newInterval ->
+                            changeBehaviour(BehaviourType.CONFIRM, position) {
+                                it.toConfirmAction().copy(nagIntervalSeconds = newInterval)
+                                    .toBehaviourEntity()
+                            }
+                        },
+                        onContent = { newContent ->
+                            changeBehaviour(BehaviourType.CONFIRM, position) {
+                                it.toConfirmAction().copy(content = newContent).toBehaviourEntity()
                             }
                         }
                     )

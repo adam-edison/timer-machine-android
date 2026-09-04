@@ -67,6 +67,15 @@ class EditableBehaviourLayout(
 
     private val enabledBehaviourTypes = BehaviourType.entries
 
+    /**
+     * Behaviour types that claim the step's terminal timing (what happens when the step's
+     * countdown ends) and so can't be combined on the same step.
+     */
+    private val mutuallyExclusiveBehaviourTypes = mapOf(
+        BehaviourType.HALT to BehaviourType.CONFIRM,
+        BehaviourType.CONFIRM to BehaviourType.HALT,
+    )
+
     init {
         flexWrap = FlexWrap.WRAP
         setShowDivider(SHOW_DIVIDER_MIDDLE)
@@ -74,7 +83,9 @@ class EditableBehaviourLayout(
 
         binding.btnBehaviourAdd.setOnClickListener { view ->
             val currentTypes = data.keys
-            val showTypes = enabledBehaviourTypes.filter { type -> type !in currentTypes }
+            val showTypes = enabledBehaviourTypes.filter { type ->
+                type !in currentTypes && mutuallyExclusiveBehaviourTypes[type] !in currentTypes
+            }
             if (showTypes.isNotEmpty()) {
                 popupMenu {
                     dropdownGravity = Gravity.TOP or Gravity.END

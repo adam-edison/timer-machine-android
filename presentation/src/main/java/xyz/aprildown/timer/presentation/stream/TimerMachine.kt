@@ -3,8 +3,10 @@ package xyz.aprildown.timer.presentation.stream
 import xyz.aprildown.timer.domain.entities.BehaviourType
 import xyz.aprildown.timer.domain.entities.StepEntity
 import xyz.aprildown.timer.domain.entities.TimerEntity
+import xyz.aprildown.timer.domain.entities.toConfirmAction
 import xyz.aprildown.timer.domain.entities.toCountAction
 import xyz.aprildown.timer.domain.entities.toHalfAction
+import xyz.aprildown.timer.presentation.stream.task.ConfirmTask
 import xyz.aprildown.timer.presentation.stream.task.CountDownTimerTask
 import xyz.aprildown.timer.presentation.stream.task.StopwatchTask
 import xyz.aprildown.timer.presentation.stream.task.Task
@@ -32,6 +34,7 @@ internal class TimerMachine(
         fun beep()
         fun notifyHalf(halfOption: Int)
         fun countRead(content: String)
+        fun confirmAlert(timerId: Int, index: TimerIndex)
     }
 
     private val timerId = timer.id
@@ -127,15 +130,36 @@ internal class TimerMachine(
     private fun StepEntity.Step.toTask(useTtsNextStep: Boolean = false): Task {
         val behaviour = behaviour
         val countUp = behaviour.find { it.type == BehaviourType.HALT } != null
-        return if (countUp) {
-            StopwatchTask(master = this@TimerMachine)
-        } else {
-            CountDownTimerTask(master = this@TimerMachine, countDownTime = length).apply {
+        val confirmBehaviour = behaviour.find { it.type == BehaviourType.CONFIRM }
+
+        val task = when {
+            confirmBehaviour != null -> {
+                val action = confirmBehaviour.toConfirmAction()
+                ConfirmTask(
+                    master = this@TimerMachine,
+                    countDownTime = length,
+                    onConfirmTick = { elapsedMillis ->
+                        val elapsedSeconds = elapsedMillis / 1000
+                        val shouldAlert = elapsedSeconds == 0L ||
+                            (
+                                action.nagIntervalSeconds > 0 &&
+                                    elapsedSeconds % action.nagIntervalSeconds == 0L
+                                )
+                        if (shouldAlert) {
+                            listener.confirmAlert(timerId, currentIndex)
+                        }
+                    },
+                )
+            }
+            countUp -> StopwatchTask(master = this@TimerMachine)
+            else -> CountDownTimerTask(master = this@TimerMachine, countDownTime = length).apply {
                 if (useTtsNextStep) {
                     addTickListener(WarmUpTtsListener(warmUp = { listener.countRead("") }))
                 }
             }
-        }.apply {
+        }
+
+        return task.apply {
             behaviour.forEach { item ->
                 when (item.type) {
                     BehaviourType.BEEP -> {
