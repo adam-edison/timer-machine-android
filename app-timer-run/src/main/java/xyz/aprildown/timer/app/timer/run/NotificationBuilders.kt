@@ -313,6 +313,45 @@ internal fun Context.buildScreenNotificationBuilder(
         .setGroup("screen")
 }
 
+/**
+ * A QR_SCAN step started with nothing watching this timer's running screen (e.g. it was
+ * started from the timer list, not by opening the running screen first) — a full-screen
+ * intent, same mechanism as [buildScreenNotificationBuilder], is the reliable way to bring
+ * one to the foreground from a background service on modern Android so the scan can happen.
+ * No "Next"/"+1 min" actions here — Next is blocked entirely while QR-locked.
+ */
+internal fun Context.buildQrScanNotificationBuilder(
+    appNavigator: AppNavigator,
+    timerItem: TimerEntity,
+    currentStepName: String,
+): Builder {
+    val title = resources.getString(RBase.string.notif_qr_scan_needed, currentStepName)
+    val timerId = timerItem.id
+
+    val showOneIntent = appNavigator.getOneIntent(timerId = timerId, inNewTask = true)
+    val pendingShowOneIntent = pendingActivityIntent(showOneIntent, timerId)
+
+    // Full screen intent has flags so it is different than the content intent.
+    val fullScreen = appNavigator.getOneIntent(timerId = timerId, inNewTask = true)
+        .addFlags(Intent.FLAG_ACTIVITY_NO_USER_ACTION)
+    val pendingFullScreen = pendingActivityIntent(fullScreen, timerId)
+
+    return Builder(this, CHANNEL_SCREEN)
+        .setShowWhen(false)
+        .setSmallIcon(RBase.drawable.ic_watch)
+        .setContentTitle(title)
+        .setContentIntent(pendingShowOneIntent)
+        .setFullScreenIntent(pendingFullScreen, true)
+        .setAutoCancel(false)
+        .setOngoing(true)
+        .setLocalOnly(false)
+        .setCategory(NotificationCompat.CATEGORY_REMINDER)
+        .setPriority(NotificationCompat.PRIORITY_MAX)
+        .setColor(newDynamicTheme.colorPrimary)
+        .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+        .setGroup("qr_scan")
+}
+
 internal fun Context.buildBehaviourNotification(
     appNavigator: AppNavigator,
     context: Context,

@@ -21,6 +21,7 @@ use only (see licensing note at the bottom).
 - [ ] [12. Self-hosted high-quality TTS voice](#12-self-hosted-high-quality-tts-voice)
 - [ ] [13. Sound sequencing across behaviors on one step](#13-sound-sequencing-across-behaviors-on-one-step)
 - [ ] [14. Tags — additional to folders, with filtering and saved searches](#14-tags--additional-to-folders-with-filtering-and-saved-searches)
+- [ ] [15. Import/export compatibility across builds](#15-importexport-compatibility-across-builds-mainline--personal-fork)
 
 Check a box and flip its section's `Status:` line to `done` in the same commit
 that merges the feature branch into `personal`.
@@ -501,6 +502,38 @@ the timer entirely (Reset) still always works.
   `qrScanSuccessIntent` action the notification/service layer defines, or
   shows a "wrong code" message and leaves the step locked (no auto-retry on
   a mismatch — avoids a relaunch loop; the user retries via "Next").
+- **Bug found in manual testing: auto-launch silently didn't happen when a
+  timer was started from the timer list instead of by opening its running
+  screen first.** Root cause: `OneViewModel` only exists, and only attaches
+  itself as a `TimerMachineListener` (`OneViewModel.attachPresenter()` →
+  `presenter.addListener`), once `OneActivity` for that timer is actually
+  opened — starting from the list sends `startIntent` straight to
+  `MachineService` (`TimerViewModel.startPauseAction()`), never touching
+  `OneActivity` at all, so `started()` (and its `qrScanRequestEvent`)
+  fired into a `listeners[timerId]` that was still empty. Two-part fix:
+  - `MachinePresenter.startBehaviours()` gained a `QR_SCAN` case
+    (alongside the pre-existing `SCREEN` one) that checks
+    `listeners[id].isNullOrEmpty()` and, if nothing's watching, calls a new
+    `view.launchQrScanScreen(...)`. `MachineService` implements it by
+    posting a **full-screen-intent notification** targeting `OneActivity`
+    — the exact mechanism `SCREEN`'s `fullScreen` option already uses to
+    reliably launch an Activity from a background service on modern
+    Android (`buildScreenNotificationBuilder`'s `.setFullScreenIntent(...)`
+    approach, mirrored as `buildQrScanNotificationBuilder`) — rather than a
+    raw `startActivity()` call, which the SCREEN behavior's own code
+    comment already flags as unreliable under tightening background-launch
+    restrictions. Reuses `CHANNEL_SCREEN` and the existing
+    `USE_FULL_SCREEN_INTENT` manifest permission — no new channel or
+    permission needed. Cleared via a new `closeQrScanScreen()`, called
+    alongside the existing `closeScreen()` in `stopBehaviours()` (so it's
+    cleared on every step transition, same lifecycle as `SCREEN`'s).
+  - `OneViewModel.setTimerItem()` (called both by `started()`-adjacent
+    paths and by `loadTimer()`'s "attach to an already-running timer" path)
+    now also fires `qrScanRequestEvent` when it attaches to a timer that's
+    already `RUNNING` on a QR-locked step — covers `OneActivity` opening
+    (whether the user tapped the new notification or opened the app
+    themselves) onto a step that started before this `OneViewModel` existed
+    to hear the original `started()` call.
 - Notification: the persistent running notification's "Next" action is
   omitted entirely (not just left to silently no-op) while the current step
   is QR-locked — `MachineNotif.TimerNotif.withStartEvent` now computes and
@@ -524,10 +557,17 @@ the timer entirely (Reset) still always works.
 + `MachineService.kt` + `OtherModule.kt` (new
 `advancePastQrScan`/`qrScanSuccessIntent` plumbing, mirroring `increTimer`) ·
 `OneViewModel.kt` (`isCurrentStepQrLocked`, `onQrScanResult`,
-`qrScanRequestEvent` fired from `started()`) · `BaseOneFragment.kt` +
-`OneFragment.kt` (auto-launch observer, Next repurposed as manual retry) ·
-`MachineNotif.kt` + `NotificationBuilders.kt` (omit Next while locked) ·
-new `component-key/.../QrCodeScanner.kt` (Play Services scanner wrapper) ·
+`qrScanRequestEvent` fired from both `started()` and `setTimerItem()`) ·
+`BaseOneFragment.kt` + `OneFragment.kt` (auto-launch observer, Next
+repurposed as manual retry) · `MachineNotif.kt` + `NotificationBuilders.kt`
+(omit Next while locked; new `buildQrScanNotificationBuilder`, full-screen
+intent targeting `OneActivity` when nothing's watching, mirroring
+`buildScreenNotificationBuilder`) · `Constants.kt` (new `NOTIF_ID_QR_SCAN`)
+· `MachineContract.kt` (new `launchQrScanScreen`/`closeQrScanScreen`, plus
+the two test-double `View` implementations in
+`MachinePresenterUnitTest.kt`/`MachinePresenterTest.kt` that had to grow
+matching overrides) · new `component-key/.../QrCodeScanner.kt` (Play
+Services scanner wrapper) ·
 `BehaviourTypeUtils.kt`/`BehaviourLayoutUtils.kt` (icon/name/desp/chip text)
 · new `ic_qr_code.xml` · `BehaviourSettingsView.kt` (`addQrScanItems`, reused
 by both `UpdateStepDialog.kt` and `EditActivity.kt` per item 2's trap #2) ·
@@ -1029,6 +1069,62 @@ meaningfully more.
 **Status:** not started
 
 **Manual test:** _(fill in after building)_
+
+## 15. Import/export compatibility across builds (mainline ↔ personal fork)
+
+Branch: none — a verification/hardening task, not a fresh feature branch;
+do it alongside whichever item touches the import path next (item 8), or
+standalone.
+
+**What:** can a timer exported as JSON from a different build of this app —
+older mainline (no Confirm/QR_SCAN/day-condition), an older personal-fork
+build, or vice versa — be imported here without crashing, with sensible
+defaults for whatever fields that build doesn't know about? Raised while
+testing item 5 (QR Scan): "can I import an existing timer that was saved in
+main branch and import it here and sensible defaults will be populated (or
+will it crash)?"
+
+**Traced through the actual code, not yet device-tested:**
+- **Importing an older/mainline export into this fork: already safe.**
+  `StepData.Step`/`Group` (`data/.../datas/StepData.kt`) use standard Moshi
+  codegen (`@JsonClass(generateAdapter = true)`), which falls back to each
+  field's Kotlin default when a JSON key is absent — the same mechanism
+  item 3's `conditionDays` field already relies on and confirmed working.
+  `BehaviourDataJsonAdapter` (hand-written,
+  `data/.../json/BehaviourDataJsonAdapter.kt`) explicitly defaults every
+  field when missing and explicitly skips unrecognized JSON keys
+  (`reader.selectName` returning `-1`) rather than erroring. Since this
+  fork's `BehaviourType` enum is a strict superset of mainline's,
+  `BehaviourType.valueOf(reader.nextString())`
+  (`BehaviourDataJsonAdapter.kt:25`) always resolves for any type string an
+  older/mainline export could contain. Net: this direction should just
+  work, with sensible defaults, no crash.
+- **The reverse direction — exporting a fork-specific timer (Confirm,
+  QR_SCAN, day-conditioned steps) for a build that doesn't have those types
+  yet: not safe today.** `BehaviourDataJsonAdapter.fromJson()`'s
+  `BehaviourType.valueOf(reader.nextString())` throws an uncaught
+  `IllegalArgumentException` for any type string the *receiving* build's
+  enum doesn't have (e.g. `"QR_SCAN"` on a build that predates it). Nothing
+  in the call chain (`ShareTimer.receiveFromString` →
+  `AppDataRepositoryImpl.unParcelData`/`fromJson`) catches this — it would
+  surface as a crash or an unhandled exception, not a graceful "skip this
+  one behavior, keep the rest of the step" degradation. Matters for: a
+  downgrade, sharing a timer with someone on stock/mainline, or restoring a
+  fork-made backup onto a build that's dropped a feature (like the aborted
+  item 4 would have, if it had shipped and then been reverted).
+
+**What to do:**
+1. Confirm the safe direction for real — via clipboard copy/paste today
+   (`EditActivity`'s "Copy to clipboard"/"Create from clipboard", the same
+   `ShareTimer` path item 8's file-based import will reuse) using JSON
+   actually exported from an unmodified build.
+2. Harden the risky direction: make `BehaviourDataJsonAdapter.fromJson()`
+   treat an unrecognized `type` value as "drop this one behavior, keep
+   parsing the rest of the step" instead of throwing — same spirit as its
+   existing unknown-*field-name* skip logic, one level up, now for an
+   unknown *type value*.
+
+**Status:** not started
 
 ---
 

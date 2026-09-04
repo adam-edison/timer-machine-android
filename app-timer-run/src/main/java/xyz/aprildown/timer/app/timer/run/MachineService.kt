@@ -370,6 +370,17 @@ class MachineService :
         }
     }
 
+    override fun launchQrScanScreen(timerItem: TimerEntity, currentStepName: String) {
+        notificationManager.notify(
+            Constants.NOTIF_ID_QR_SCAN,
+            buildQrScanNotificationBuilder(appNavigator, timerItem, currentStepName).build()
+        )
+    }
+
+    override fun closeQrScanScreen() {
+        notificationManager.cancel(Constants.NOTIF_ID_QR_SCAN)
+    }
+
     override fun closeScreen() {
         notificationManager.cancel(Constants.NOTIF_ID_SCREEN)
         ScreenActivity.screen?.finish()

@@ -282,6 +282,7 @@ class MachinePresenter @Inject constructor(
             stopMusic()
             stopVibrating()
             closeScreen()
+            closeQrScanScreen()
             stopReading()
             disableTone()
             dismissBehaviourNotification()
@@ -300,6 +301,14 @@ class MachinePresenter @Inject constructor(
                         BehaviourType.SCREEN -> {
                             val action = behavior.toScreenAction()
                             view?.showScreen(timer, currentStep.label, action.fullScreen)
+                        }
+                        BehaviourType.QR_SCAN -> {
+                            // Nothing is watching this timer's running screen to auto-launch
+                            // the scanner itself (e.g. it was started from the timer list) —
+                            // bring one to the foreground so the scan can actually happen.
+                            if (listeners[id].isNullOrEmpty()) {
+                                view?.launchQrScanScreen(timer, currentStep.label)
+                            }
                         }
                         BehaviourType.VIBRATION -> {
                             val action = behavior.toVibrationAction()
@@ -696,6 +705,5 @@ class MachinePresenter @Inject constructor(
                 sayMore = false,
             )
         }
-
     }
 }

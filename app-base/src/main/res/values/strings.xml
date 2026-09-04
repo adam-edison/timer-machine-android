@@ -387,6 +387,7 @@
     <string name="notif_timer_running">%1$s running</string>
     <string name="notif_timer_paused">%1$s paused</string>
     <string name="notif_timer_screen_showing">%1$s is waking the screen</string>
+    <string name="notif_qr_scan_needed">Scan a QR code to continue \"%1$s\"</string>
 
     <string name="notif_channel_fore_title">Foreground Service</string>
     <string name="notif_channel_fore_desp">Controls all notifications</string>

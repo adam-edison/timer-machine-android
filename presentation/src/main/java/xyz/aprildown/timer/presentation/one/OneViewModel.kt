@@ -300,6 +300,14 @@ class OneViewModel @Inject constructor(
         timerStepTime = timerItem.getStep(index)?.length ?: 0L
         elapsedBaseTime = timerItem.getTimeBeforeIndex(index)
         elapsedCurrentTime.value = 0L
+
+        // Covers attaching to a timer that's already running a QR_SCAN step — e.g. it was
+        // started from the timer list rather than by opening this running screen first, so
+        // started() (and its own qrScanRequestEvent trigger) already fired before this
+        // ViewModel/listener even existed to hear it.
+        if (state == StreamState.RUNNING && isCurrentStepQrLocked()) {
+            _qrScanRequestEvent.value = Event(Unit)
+        }
     }
 
     private fun detachListener() {

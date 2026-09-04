@@ -60,6 +60,14 @@ interface MachineContract {
         fun showScreen(timerItem: TimerEntity, currentStepName: String, fullScreen: Boolean)
         fun closeScreen()
 
+        /**
+         * A QR_SCAN step just started and nothing is currently watching this timer (no
+         * running screen open for it) — launch one via a full-screen-intent notification,
+         * the same mechanism [showScreen] uses, so the scan can actually be triggered.
+         */
+        fun launchQrScanScreen(timerItem: TimerEntity, currentStepName: String)
+        fun closeQrScanScreen()
+
         // Halt is handled in the presenter
 
         fun beginReading(
