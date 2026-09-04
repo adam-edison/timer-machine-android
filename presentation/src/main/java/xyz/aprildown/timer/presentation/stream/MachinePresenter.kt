@@ -25,6 +25,7 @@ import xyz.aprildown.timer.domain.entities.toCountAction
 import xyz.aprildown.timer.domain.entities.toFlashlightAction
 import xyz.aprildown.timer.domain.entities.toMusicAction
 import xyz.aprildown.timer.domain.entities.toNotificationAction
+import xyz.aprildown.timer.domain.entities.toQrScanAction
 import xyz.aprildown.timer.domain.entities.toScreenAction
 import xyz.aprildown.timer.domain.entities.toVibrationAction
 import xyz.aprildown.timer.domain.entities.toVoiceAction
@@ -36,6 +37,8 @@ import xyz.aprildown.timer.domain.utils.AppTracker
 import xyz.aprildown.timer.domain.utils.Constants
 import xyz.aprildown.timer.domain.utils.fireAndForget
 import xyz.aprildown.timer.presentation.R
+import xyz.aprildown.timer.presentation.stream.task.StopwatchTask
+import xyz.aprildown.timer.presentation.stream.task.TerminalWaitTask
 import javax.inject.Inject
 
 class MachinePresenter @Inject constructor(
@@ -173,7 +176,24 @@ class MachinePresenter @Inject constructor(
     private fun isCurrentStepQrLocked(timerId: Int): Boolean {
         val (timer, machine) = timers[timerId] ?: return false
         val step = timer.getStep(machine.currentIndex) ?: return false
-        return step.behaviour.any { it.type == BehaviourType.QR_SCAN }
+        val action = step.behaviour
+            .find { it.type == BehaviourType.QR_SCAN }
+            ?.toQrScanAction()
+            ?: return false
+
+        if (action.emergencyExitSeconds <= 0) return true
+
+        // Elapsed time since the step's nominal end — null (still counting down, i.e.
+        // before the nominal end) or a StopwatchTask's currentTime (a HALT step has no
+        // countdown, so its "nominal end" is immediate — currentTime already counts up
+        // from that point) both mean the emergency exit hasn't started counting yet.
+        val elapsedPastNominalEnd = when (val task = machine.currentTask) {
+            is TerminalWaitTask -> task.elapsedSinceWaitBegan
+            is StopwatchTask -> task.currentTime
+            else -> null
+        } ?: return true
+
+        return elapsedPastNominalEnd < action.emergencyExitSeconds * 1_000L
     }
 
     override fun moveTimer(timerId: Int, index: TimerIndex) {

@@ -29,6 +29,14 @@ internal class TerminalWaitTask(
     override val currentTime: Long
         get() = if (isWaiting) waitMillisPassedBase + waitMillisPassedCurrent else millisLeft
 
+    /**
+     * Milliseconds elapsed since the wait phase began, or null while still counting down
+     * (i.e. before the step's nominal end) — [currentTime] alone can't distinguish those,
+     * since it counts down during the first phase and up during the second.
+     */
+    val elapsedSinceWaitBegan: Long?
+        get() = if (isWaiting) waitMillisPassedBase + waitMillisPassedCurrent else null
+
     override fun start() {
         super.start()
         timer.start()

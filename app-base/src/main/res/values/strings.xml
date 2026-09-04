@@ -179,6 +179,9 @@
     <string name="qr_scan_saved_code_clear">Accept any code</string>
     <string name="qr_scan_register_success">Code saved</string>
     <string name="qr_scan_wrong_code">That code doesn\'t match — try again</string>
+    <string name="qr_scan_emergency_exit">Emergency Exit</string>
+    <string name="qr_scan_emergency_exit_desp_usage">Enter how many seconds after this step\'s countdown ends (or, for Halt, after it starts) before \"Next\" works again even without a scan</string>
+    <string name="qr_scan_emergency_exit_desp_0_meaning">0 to disable — only a scan can ever advance this step</string>
 
     <string name="behaviour_voice">Voice</string>
     <string name="behaviour_voice_help">Read this step name</string>

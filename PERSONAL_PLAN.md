@@ -534,6 +534,43 @@ the timer entirely (Reset) still always works.
     (whether the user tapped the new notification or opened the app
     themselves) onto a step that started before this `OneViewModel` existed
     to hear the original `started()` call.
+- **Second bug found immediately after, from the same cause:** the fix
+  above introduced an unbreakable loop. `BaseOneFragment` binds/unbinds to
+  `MachineService` on every `onStart()`/`onStop()`, and the scanner itself
+  backgrounds the host screen while it's up — so returning from *any* scan
+  attempt (success, cancel, or failure) re-ran the same
+  bind → `attachPresenter()` → `setTimerItem()` path, which fired
+  `qrScanRequestEvent` again unconditionally, auto-relaunching the scanner
+  every single time. Fixed by tracking the last step index actually
+  auto-launched for (`OneViewModel.lastAutoLaunchedQrScanIndex`) and only
+  firing again once the step genuinely changes — the manual "Next" retry
+  bypasses this tracker and always works regardless. Same root cause also
+  left the QR scan notification permanently stuck (nothing ever closed it
+  just because someone started watching) — fixed by having
+  `MachinePresenter.addListener()` close it the moment a timer that had no
+  listeners gains its first one, if the current step is still QR-locked.
+- **Emergency exit, configurable per step:** `QrScanAction.emergencyExitSeconds`
+  (0 = disabled, matching the nag-interval-style convention elsewhere) —
+  after this many seconds past the step's *nominal end* (its countdown
+  reaching zero, or immediately for a HALT-combined step, which has no
+  countdown), "Next" starts working again even without a scan. Implemented
+  by making `MachinePresenter.isCurrentStepQrLocked()` time-aware rather
+  than adding new tracking: since the guard is evaluated live at tap time,
+  it just needs to know how long the step has been past its nominal end,
+  which the currently-running task already tracks — `TerminalWaitTask`
+  (Confirm's or standalone QR_SCAN's wait phase) gained a public
+  `elapsedSinceWaitBegan: Long?` (null while still counting down, since
+  `currentTime` alone can't distinguish counting-down-to-zero from
+  counting-up-since-zero), and `StopwatchTask` (HALT's) already exposes
+  `currentTime` counting up from the (immediate) start, which for HALT
+  already *is* "elapsed past nominal end". Once past the threshold,
+  `isCurrentStepQrLocked()` simply returns `false` — no explicit "unlock"
+  event needed, the running screen's Next button and every guard just work
+  correctly the moment the user taps. **Known gap:** the persistent
+  notification's Next-omission is a static, per-step-start decision — it
+  won't reappear once the emergency window opens without reopening the app
+  first, since nothing periodically rebuilds it. Acceptable for a fallback
+  meant to be used by opening the app anyway.
 - Notification: the persistent running notification's "Next" action is
   omitted entirely (not just left to silently no-op) while the current step
   is QR-locked — `MachineNotif.TimerNotif.withStartEvent` now computes and
@@ -593,20 +630,29 @@ time the scanning UI would have.
 **Status:** built, deployed to a physical device for manual testing, not
 yet merged into `personal`.
 
-**Manual test:** _(fill in after on-device testing — confirm: a standalone
-QR_SCAN step's scanner auto-launches the moment the step starts, holds
-(no alert/nag of its own) until a matching scan, and "Next"/jumping to it/
-its own countdown finishing all fail to advance it; QR_SCAN combined with
-Confirm still gets Confirm's countdown-then-hold-with-alert-and-nag, but
-only a scan (not "Next") dismisses it; QR_SCAN combined with HALT holds
-instantly as HALT always has, again only dismissed by a scan; scanning the
-right code (or any code, if none is saved) advances immediately even before
-a standalone step's countdown finishes; scanning a mismatched code shows
-the wrong-code message and stays locked, with "Next" available as a manual
-retry; the persistent notification has no "Next" action while locked, and
-its other actions (Pause/+1 min) still work; Reset always stops the timer
-regardless of lock state; registering a required code from the editor via
-the "Required Code" item round-trips correctly on save/reload)_
+**Manual test:** on-device via `scripts/deploy.sh`, iterating live with the
+user across several rounds. Confirmed working: the scanner auto-launches
+the moment a QR_SCAN step starts, whether reached by opening the running
+screen directly or by starting from the timer list (the bug that needed
+the full-screen-intent notification fix); scanning the right code (or any
+code, if none is saved) advances immediately; scanning a mismatched code
+shows the wrong-code message and stays locked, with "Next" as a manual
+retry that no longer loops or leaves the notification stuck.
+
+_(Still to confirm — the emergency exit feature, added after the above:
+with `emergencyExitSeconds` set on a standalone QR_SCAN step, "Next" stays
+blocked for the full countdown plus that many seconds into the wait, then
+starts working even without a scan; with QR_SCAN + Confirm, the clock
+starts at Confirm's wait beginning (countdown end), not step start; with
+QR_SCAN + Halt, the clock starts immediately (Halt has no countdown); 0
+(or unset) never unlocks — matches today's behavior exactly. Also still to
+confirm on a clean run: QR_SCAN combined with Confirm gets Confirm's
+alert/nag as usual but only a scan or the emergency exit dismisses it
+(never plain "Next"); QR_SCAN combined with HALT holds instantly, same
+rule; the persistent notification has no "Next" action while locked and
+its other actions still work; Reset always stops the timer regardless of
+lock state; registering a required code from the editor round-trips
+correctly on save/reload.)_
 
 ## 6. Searchable step-level activity log
 

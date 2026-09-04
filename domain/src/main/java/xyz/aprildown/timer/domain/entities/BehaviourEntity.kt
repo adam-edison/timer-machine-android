@@ -15,6 +15,8 @@ package xyz.aprildown.timer.domain.entities
  *     str2: spoken content, "" for the default "Did you finish {step_name}?"
  * QR_SCAN:
  *     str1: the required QR code content, "" to accept any scanned code
+ *     str2: emergency exit in seconds after the step's nominal end, 0 or "" to disable
+ *           (never allow "Next" — only a scan can ever advance)
  * VOICE:
  *     str1: speak content
  * BEEP:
@@ -193,15 +195,26 @@ fun BehaviourEntity.toConfirmAction(): ConfirmAction {
 data class QrScanAction(
     // "" accepts any scanned code as a match.
     val savedCode: String = "",
+    // 0 disables it: only a scan can ever advance. Otherwise, "Next" starts working again
+    // this many seconds after the step's nominal end (its countdown finishing, or
+    // immediately for a HALT step, which has no countdown), regardless of scan state.
+    val emergencyExitSeconds: Int = 0,
 ) : Action {
     override fun toBehaviourEntity(): BehaviourEntity {
-        return BehaviourEntity(BehaviourType.QR_SCAN, str1 = savedCode)
+        return BehaviourEntity(
+            BehaviourType.QR_SCAN,
+            str1 = savedCode,
+            str2 = if (emergencyExitSeconds <= 0) "" else emergencyExitSeconds.toString(),
+        )
     }
 }
 
 fun BehaviourEntity.toQrScanAction(): QrScanAction {
     require(type == BehaviourType.QR_SCAN)
-    return QrScanAction(savedCode = str1)
+    return QrScanAction(
+        savedCode = str1,
+        emergencyExitSeconds = str2.toIntOrNull() ?: 0,
+    )
 }
 
 fun QrScanAction.matches(scannedCode: String): Boolean {

@@ -821,6 +821,12 @@ class EditActivity :
                                 it.toQrScanAction().copy(savedCode = "").toBehaviourEntity()
                             }
                         },
+                        onEmergencyExitSeconds = { newSeconds ->
+                            changeBehaviour(BehaviourType.QR_SCAN, position) {
+                                it.toQrScanAction().copy(emergencyExitSeconds = newSeconds)
+                                    .toBehaviourEntity()
+                            }
+                        },
                     )
                 }
                 BehaviourType.HALF -> {

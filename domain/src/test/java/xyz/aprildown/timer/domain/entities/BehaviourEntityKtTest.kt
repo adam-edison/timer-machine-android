@@ -22,6 +22,20 @@ class BehaviourEntityKtTest {
     }
 
     @Test
+    fun `QrScanAction with an emergency exit round-trips through BehaviourEntity`() {
+        val action = QrScanAction(savedCode = "my-secret-code", emergencyExitSeconds = 120)
+
+        assertEquals(action, action.toBehaviourEntity().toQrScanAction())
+    }
+
+    @Test
+    fun `QrScanAction with no emergency exit round-trips to zero`() {
+        val action = QrScanAction(emergencyExitSeconds = 0)
+
+        assertEquals(action, action.toBehaviourEntity().toQrScanAction())
+    }
+
+    @Test
     fun `blank saved code accepts any scanned code`() {
         val action = QrScanAction(savedCode = "")
 

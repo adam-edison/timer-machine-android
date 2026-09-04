@@ -302,6 +302,12 @@ class UpdateStepDialog :
                                 it.toQrScanAction().copy(savedCode = "").toBehaviourEntity()
                             }
                         },
+                        onEmergencyExitSeconds = { newSeconds ->
+                            changeBehaviour(BehaviourType.QR_SCAN) {
+                                it.toQrScanAction().copy(emergencyExitSeconds = newSeconds)
+                                    .toBehaviourEntity()
+                            }
+                        },
                     )
                 }
                 BehaviourType.HALF -> {
