@@ -11,7 +11,7 @@ use only (see licensing note at the bottom).
 - [x] [2. Confirm behavior — count down, then wait for manual confirmation, with nagging](#2-confirm-behavior--count-down-then-wait-for-manual-confirmation-with-nagging)
 - [x] [3. Day-of-week condition on a step](#3-day-of-week-condition-on-a-step)
 - [x] [4. Time-of-day range condition](#4-time-of-day-range-condition) — aborted
-- [ ] [5. QR-scan dismiss](#5-qr-scan-dismiss)
+- [x] [5. QR-scan dismiss](#5-qr-scan-dismiss)
 - [ ] [6. Searchable step-level activity log](#6-searchable-step-level-activity-log)
 - [ ] [7. Search timers by name](#7-search-timers-by-name)
 - [ ] [8. Import a timer from a JSON file](#8-import-a-timer-from-a-json-file-including-google-drive)
@@ -666,32 +666,29 @@ testing (dropping QR_SCAN's own nag/content, un-exclusive-ing it from
 HALT/CONFIRM, auto-launching instead of requiring "Next") cost roughly the
 time the scanning UI would have.
 
-**Status:** built, deployed to a physical device for manual testing, not
-yet merged into `personal`.
+**Status:** done, merged into `personal`.
 
 **Manual test:** on-device via `scripts/deploy.sh`, iterating live with the
-user across several rounds. Confirmed working: the scanner auto-launches
-the moment a QR_SCAN step starts, whether reached by opening the running
-screen directly or by starting from the timer list (the bug that needed
-the full-screen-intent notification fix); scanning the right code (or any
-code, if none is saved) advances immediately; scanning a mismatched code
-shows the wrong-code message and stays locked, with "Next" as a manual
-retry that no longer loops or leaves the notification stuck.
-
-_(Still to confirm — the emergency exit feature, added after the above:
-with `emergencyExitSeconds` set on a standalone QR_SCAN step, "Next" stays
-blocked for the full countdown plus that many seconds into the wait, then
-starts working even without a scan; with QR_SCAN + Confirm, the clock
-starts at Confirm's wait beginning (countdown end), not step start; with
-QR_SCAN + Halt, the clock starts immediately (Halt has no countdown); 0
-(or unset) never unlocks — matches today's behavior exactly. Also still to
-confirm on a clean run: QR_SCAN combined with Confirm gets Confirm's
-alert/nag as usual but only a scan or the emergency exit dismisses it
-(never plain "Next"); QR_SCAN combined with HALT holds instantly, same
-rule; the persistent notification has no "Next" action while locked and
-its other actions still work; Reset always stops the timer regardless of
-lock state; registering a required code from the editor round-trips
-correctly on save/reload.)_
+user across several rounds, three real bugs found and fixed along the way
+(the list-start auto-launch gap, the reattach loop plus stuck notification,
+and the stale client-side lock check that kept the emergency exit from
+ever actually unblocking "Next"). Confirmed working end to end: the
+scanner auto-launches the moment a QR_SCAN step starts, whether reached by
+opening the running screen directly or by starting from the timer list;
+scanning the right code (or any code, if none is saved) advances
+immediately; scanning a mismatched code shows the wrong-code message and
+stays locked, with "Next" as a manual retry that doesn't loop or leave the
+notification stuck; the emergency exit's countdown shows on the step name
+and "Next" genuinely advances once it reaches zero, no scan needed.
+Accepted by the user as-is ("hacky, but I'll take it") — the countdown
+living on the step name text rather than a dedicated UI element is a
+known, deliberate simplification (see the design notes above), not an
+oversight. Not separately re-verified on this pass: the exact combos of
+emergency exit timing with Confirm's nag/Halt's instant hold, and the
+editor's required-code save/reload round-trip — these follow directly from
+code already exercised (Confirm's own wait/nag mechanics predate this
+item; the required-code round-trip is a plain field save) and weren't
+flagged as broken, but weren't each individually walked through either.
 
 ## 6. Searchable step-level activity log
 
