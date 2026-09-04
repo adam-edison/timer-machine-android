@@ -10,8 +10,8 @@ use only (see licensing note at the bottom).
 - [x] [1. Total timer duration shown in the list](#1-total-timer-duration-shown-in-the-list)
 - [x] [2. Confirm behavior — count down, then wait for manual confirmation, with nagging](#2-confirm-behavior--count-down-then-wait-for-manual-confirmation-with-nagging)
 - [x] [3. Day-of-week condition on a step](#3-day-of-week-condition-on-a-step)
-- [ ] [4. Time-of-day range condition](#4-time-of-day-range-condition)
-- [ ] [5. QR-scan dismiss mode for HALT](#5-qr-scan-dismiss-mode-for-halt)
+- [x] [4. Time-of-day range condition](#4-time-of-day-range-condition) — aborted
+- [ ] [5. QR-scan dismiss](#5-qr-scan-dismiss)
 - [ ] [6. Searchable step-level activity log](#6-searchable-step-level-activity-log)
 - [ ] [7. Search timers by name](#7-search-timers-by-name)
 - [ ] [8. Import a timer from a JSON file](#8-import-a-timer-from-a-json-file-including-google-drive)
@@ -400,33 +400,35 @@ correctly instead of showing a bogus 0. Merged into `personal` via
 
 ## 4. Time-of-day range condition
 
-Branch: `feat/time-range-condition`
+Branch: `feat/time-range-condition` (never built — no commits, branch never
+created)
 
 **What:** a step is active only inside — or only outside — a configured
 start–end time range. Handle overnight ranges (22:00–06:00) as a real case.
 
-**Touches:** same condition field and `shouldSkip` hook as item 3 · time-range
-picker UI.
+**Status:** aborted — scoped out during design (before any branch existed),
+judged misguided.
 
-**Effort:** 1 day.
+## 5. QR-scan dismiss
 
-**Status:** not started
+Branch: `feat/qr-scan-dismiss`
 
-**Manual test:** _(fill in after building)_
-
-## 5. QR-scan dismiss mode for HALT
-
-Branch: `feat/halt-qr-dismiss`
-
-**What:** a new dismiss mode on `HALT` — instead of tapping to resume, scan a QR
-code (any code, or one specific saved code) to clear the step.
+**What:** originally scoped as "a dismiss mode on HALT." Following the same
+lesson learned building item 2 (Confirm started as "add a nag interval to
+HALT" and turned out to need its own behavior) — this is its own behavior,
+not a HALT variant. A step with this behavior holds indefinitely once
+reached (like HALT/Confirm today) but the normal "Next" action (notification
+action, running-screen action button) is disabled while it's the active
+step — scanning the configured QR code is the *only* way to advance.
+Stopping the timer entirely still works normally.
 
 **Touches:** same behavior/adapter/UI files as item 2, plus a new full-screen scan
 screen · `CAMERA` permission in the manifest · an on-device barcode-scanning
 library (ML Kit barcode scanning avoids a network dependency, unlike some
-alternatives).
+alternatives) · wherever "Next" is currently always-available needs a guard for
+this behavior's active-and-waiting state.
 
-**Effort:** 2–4 days. Last on purpose — biggest of the five, new permission.
+**Effort:** 2–4 days. New permission, new scan screen, and a "Next" guard.
 
 **Status:** not started
 
