@@ -57,3 +57,18 @@ fun Long.produceTime(): String {
 
     return builder.toString()
 }
+
+/**
+ * Compact form with no leading zeros or separators, only non-zero units shown,
+ * e.g. "3h10m4s", "1h", "1h4m", "54s". A zero duration produces "0s".
+ */
+fun Long.produceCompactTime(): String {
+    val (hours, minutes, seconds) = this.produceHms()
+
+    val builder = StringBuilder()
+    if (hours > 0) builder.append(hours).append('h')
+    if (minutes > 0) builder.append(minutes).append('m')
+    if (seconds > 0 || builder.isEmpty()) builder.append(seconds).append('s')
+
+    return builder.toString()
+}

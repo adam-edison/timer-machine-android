@@ -40,6 +40,8 @@ import xyz.aprildown.timer.domain.usecases.timer.ShareTimer
 import xyz.aprildown.timer.presentation.BaseViewModel
 import xyz.aprildown.timer.presentation.StreamMachineIntentProvider
 import xyz.aprildown.timer.presentation.stream.StreamState
+import xyz.aprildown.timer.presentation.stream.getMaxTotalTime
+import xyz.aprildown.timer.presentation.stream.getMinTotalTime
 import xyz.aprildown.timer.presentation.stream.getTotalTime
 import javax.inject.Inject
 
@@ -92,17 +94,26 @@ class TimerViewModel @Inject constructor(
             getTimerInfoFlow.get(folderId, sortBy).asLiveData()
         }
 
-    private val timerDurations: LiveData<Map<Int, Long>> =
+    private val timerDurations: LiveData<Map<Int, TimerDuration>> =
         currentFolderId.switchMap { folderId ->
             getTimersFlow.get(folderId).map { timers ->
-                timers.associate { timer -> timer.id to timer.getTotalTime() }
+                timers.associate { timer ->
+                    timer.id to TimerDuration(
+                        today = timer.getTotalTime(),
+                        min = timer.getMinTotalTime(),
+                        max = timer.getMaxTotalTime()
+                    )
+                }
             }.asLiveData()
         }
 
     val timerList: LiveData<List<TimerListEntry>> =
         timerInfo.asFlow().combine(timerDurations.asFlow()) { infos, durations ->
             infos.map { info ->
-                TimerListEntry(timerInfo = info, duration = durations[info.id] ?: 0L)
+                TimerListEntry(
+                    timerInfo = info,
+                    duration = durations[info.id] ?: TimerDuration(today = 0L, min = 0L, max = 0L)
+                )
             }
         }.asLiveData()
 
@@ -257,5 +268,21 @@ class TimerViewModel @Inject constructor(
 
 data class TimerListEntry(
     val timerInfo: TimerInfo,
-    val duration: Long,
+    val duration: TimerDuration,
+)
+
+/**
+ * @param today how long the timer would take if run today, respecting every day-of-week
+ * condition (item 3's feature — [xyz.aprildown.timer.presentation.stream.getTotalTime]).
+ * @param min the shortest the timer could ever take, any conditioned step/group treated
+ * as always skipped ([xyz.aprildown.timer.presentation.stream.getMinTotalTime]).
+ * @param max the longest the timer could ever take, day conditions ignored
+ * ([xyz.aprildown.timer.presentation.stream.getMaxTotalTime]).
+ * [min] and [max] are equal to [today] and each other for any timer with no day
+ * conditions set.
+ */
+data class TimerDuration(
+    val today: Long,
+    val min: Long,
+    val max: Long,
 )

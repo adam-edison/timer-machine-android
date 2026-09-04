@@ -147,6 +147,61 @@ class WeekdaysFormatterTest {
         }
     }
 
+    @Test
+    fun produceCompactDataStringMondayTest() {
+        formatter = WeekdaysFormatter(MONDAY, everyDatString)
+        assertEquals(
+            "",
+            formatter.produceCompactDataString(listOf(false, false, false, false, false, false, false))
+        )
+        assertEquals(
+            compactWeekdays(1, 2, 3, 4, 5, 6, 7),
+            formatter.produceCompactDataString(listOf(true, true, true, true, true, true, true))
+        )
+        assertEquals(compactWeekdays(1, 2, 3, 4, 5), formatter.produceCompactDataString(days1))
+        assertEquals(compactWeekdays(1, 3, 5, 7), formatter.produceCompactDataString(days2))
+        assertEquals(compactWeekdays(3, 4, 6), formatter.produceCompactDataString(days3))
+        assertEquals(compactWeekdays(1, 3, 4, 6), formatter.produceCompactDataString(days4))
+        assertEquals(compactWeekdays(2, 4, 6), formatter.produceCompactDataString(days5))
+        assertEquals(compactWeekdays(1, 2, 4, 6, 7), formatter.produceCompactDataString(days6))
+    }
+
+    @Test
+    fun produceCompactDataStringInsaneTest() {
+        randomCompactTest(MONDAY)
+        randomCompactTest(TUESDAY)
+        randomCompactTest(WEDNESDAY)
+        randomCompactTest(THURSDAY)
+        randomCompactTest(FRIDAY)
+        randomCompactTest(SATURDAY)
+        randomCompactTest(SUNDAY)
+    }
+
+    private fun randomCompactTest(startWeekOn: Int) {
+        val formatter = WeekdaysFormatter(startWeekOn, everyDatString)
+        val weekDayOrderDays = WeekdaysFormatter.WeekDayOrder.Monday().days
+
+        repeat(50) {
+            val days = MutableList(7) { Random.nextBoolean() }
+
+            val resultList = mutableListOf<String?>()
+            days.forEachIndexed { index, b ->
+                if (b) {
+                    resultList += singleLetterDays.getValue(weekDayOrderDays[index])
+                } else {
+                    resultList.add(null)
+                }
+            }
+            Collections.rotate(
+                resultList,
+                if (startWeekOn == SUNDAY) -6 else -(startWeekOn - 2)
+            )
+            val resultString = resultList.filterNotNull().joinToString("")
+
+            assertEquals(resultString, formatter.produceCompactDataString(days))
+        }
+    }
+
     private fun joinWeekdays(vararg days: Int): String {
         val strings = mutableListOf<String>()
         for (day in days) {
@@ -159,9 +214,31 @@ class WeekdaysFormatterTest {
         }
         return strings.joinToString(separator = ", ")
     }
+
+    private fun compactWeekdays(vararg days: Int): String {
+        val strings = mutableListOf<String>()
+        for (day in days) {
+            val index = when (day) {
+                1, 2, 3, 4, 5, 6 -> day + 1
+                7 -> 1
+                else -> throw IllegalArgumentException("Wrong day: $day")
+            }
+            strings.add(singleLetterDays.getValue(index))
+        }
+        return strings.joinToString(separator = "")
+    }
 }
 
 private val daysNames = DateFormatSymbols().shortWeekdays
+private val singleLetterDays = mapOf(
+    MONDAY to "M",
+    TUESDAY to "T",
+    WEDNESDAY to "W",
+    THURSDAY to "H",
+    FRIDAY to "F",
+    SATURDAY to "A",
+    SUNDAY to "U",
+)
 private val days1 = listOf(true, true, true, true, true, false, false)
 private val days2 = listOf(true, false, true, false, true, false, true)
 private val days3 = listOf(false, false, true, true, false, true, false)
