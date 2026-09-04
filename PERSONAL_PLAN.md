@@ -20,6 +20,7 @@ use only (see licensing note at the bottom).
 - [ ] [11. Proactive, offline-capable TTS pre-baking](#11-proactive-offline-capable-tts-pre-baking)
 - [ ] [12. Self-hosted high-quality TTS voice](#12-self-hosted-high-quality-tts-voice)
 - [ ] [13. Sound sequencing across behaviors on one step](#13-sound-sequencing-across-behaviors-on-one-step)
+- [ ] [14. Tags — replace folders with tags, filtering, and saved searches](#14-tags--replace-folders-with-tags-filtering-and-saved-searches)
 
 Check a box and flip its section's `Status:` line to `done` in the same commit
 that merges the feature branch into `personal`.
@@ -443,7 +444,9 @@ recording every individual step completion — not just whole-timer runs — wit
 timestamp (local date + time), the timer name, the step name, and how it ended
 (auto-advanced when its countdown hit zero, or manually dismissed). Searchable by
 timer name or step text, sorted newest-first, so the answer is a one-line search
-away instead of scrolling a calendar.
+away instead of scrolling a calendar. Once item 14 (tags) exists, this search
+should extend to filter by tag too — "when did I last do strength training?"
+becomes a tag filter over stamps instead of a guess at matching free text.
 
 **What already exists (the "rudiment"):** `TimerStampEntity` (id, timerId, start,
 end — `domain/.../entities/TimerStampEntity.kt`) plus `TimerStampRepository` and
@@ -564,15 +567,32 @@ checked in `MachinePresenter.kt:606-611`, confirmed it's a hand-off, not an
 inline splice). This is a genuine reference: edit "Pushups" once, and every
 timer that runs it N times picks up the change next run.
 
-**Design:** a new `StepEntity.TimerReference(timerId: Int, loop: Int)` sealed
-subtype, resolved at the point a timer is loaded to run (and when computing
-duration) by loading the referenced `TimerEntity` and expanding its steps
-inline as if it were a `Group` with that loop count — so all the existing
-loop/skip/duration/index machinery (including item 1's duration display and
-items 3/4's conditions) keeps working unchanged. The editor shows it as a
-collapsed reference chip, picked via the `TimerPicker` dialog that already
-exists and is already used for `triggerTimerId` selection
-(`EditActivityMoreDialog.kt:69`) — no new picker UI to build.
+**Design:** calling a timer is just a special kind of step, not a wholly
+separate concept — so it should be `StepEntity.Step` with a new
+`timerReference: TimerReferenceInfo?` field (`timerId`, `loop`), not a
+divorced sealed subtype. The only thing a reference step *doesn't* have is
+its own `length` — that's the referenced sub-timer's own total time,
+computed the same way item 1's list duration already is (`getTotalTime()`).
+Everything else a normal step carries — `behaviour` (Voice/Beep/Vibration/
+etc. can still fire around the call), `type`, and critically
+`conditionDays` (item 3) — comes for free, with no special-casing, because
+it's still fundamentally a `Step`. That's what makes calling a sub-timer
+*conditionally* (e.g. only on leg days) fall out for free instead of being
+a separate feature to build — same for whatever future per-step condition
+gets added later (a revived item 4, or anything else). Resolution happens
+at the point a timer is loaded to run (and when computing duration) by
+loading the referenced `TimerEntity` and expanding its steps inline as if
+it were a `Group` with that loop count — so all the existing loop/skip/
+duration/index machinery (items 1 and 3's UI included) keeps working
+unchanged. The editor shows it as a collapsed reference chip, picked via
+the `TimerPicker` dialog that already exists and is already used for
+`triggerTimerId` selection (`EditActivityMoreDialog.kt:69`) — no new picker
+UI to build.
+
+**Enables:** combined with tags (a new item, below) — routines and
+progressions built by calling several saved timers as steps, each one
+optionally day-of-week-conditioned, picked and assembled by tag/mood/
+fitness level rather than rebuilt by hand each time.
 
 **Cycle detection:** reject saving a reference that would let a timer
 (transitively) reference itself.
@@ -822,6 +842,56 @@ sequence sound behaviors play in and the delay between each (e.g. Beep, wait
 
 **Nice-to-have, last on purpose** — deliberately not designed in detail yet.
 Revisit once the higher-priority items above are done.
+
+**Status:** not started
+
+**Manual test:** _(fill in after building)_
+
+## 14. Tags — replace folders with tags, filtering, and saved searches
+
+Branch: `feat/timer-tags`
+
+**What:** folders are a single-parent hierarchy — a timer lives in exactly
+one place. Tags are multi-label instead: a timer can carry several (e.g.
+`strength`, `cardio`, `low-energy`, `15-min`), filtered by any combination,
+stacked with item 7's name search. The payoff: entire routines and
+progressions (see item 9) can be planned and assembled by mood or fitness
+level — pick from a saved filter instead of remembering which folder
+something lives in or rebuilding a list by hand each time. Tags also give
+item 6's step-level activity log a second query axis beyond free text —
+"when did I last do strength training?" becomes a tag filter over stamps,
+not a guess at what text to search for.
+
+**Design (not fully worked out yet):**
+- Storage: simplest option is a freeform `List<String>` directly on
+  `TimerEntity.more`, JSON-encoded like item 3/8's other zero-migration
+  additions — no new Room table, no join. Real cost: renaming a tag means
+  rewriting it on every timer that carries it, not a one-place edit; a
+  proper `TagEntity` + join table avoids that at the cost of an actual
+  schema change. Worth deciding deliberately before building, not
+  defaulting to the freeform version just because it's less work.
+- Filter UI: a chip row above the timer list (multi-select, populated from
+  the union of tags actually in use), combining with item 7's search box
+  rather than replacing it.
+- Saved searches: a small new entity (name + selected tags + optional text
+  query), listed somewhere reachable in one tap, so a routine like "Low
+  Energy Strength" is a single tap instead of re-picking filters each time.
+- Whether folders get removed outright or kept alongside tags (e.g. as a
+  coarser top-level grouping, tags for everything finer) is an open
+  question — worth resolving before starting, since folders are used
+  elsewhere in the app (backup/export, the timer list's own navigation).
+- Item 6's search extends to filter by tag, not just free text over
+  timer/step name.
+
+**Touches:** _(sketch out once storage/folder questions above are settled)_
+likely `TimerEntity`/`TimerMoreEntity` (tag list) · new saved-search entity
++ DAO · timer list UI (chip filter row) · item 6's search screen (tag
+filter alongside text) · item 7's search (tag-aware).
+
+**Effort:** not estimated yet — depends on the folders-vs-tags decision
+above; a freeform-tag-list version stacked on top of the existing folder
+system is a few days, a proper tag entity + folder replacement is
+meaningfully more.
 
 **Status:** not started
 
