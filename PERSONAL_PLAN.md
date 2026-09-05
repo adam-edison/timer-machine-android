@@ -23,6 +23,7 @@ use only (see licensing note at the bottom).
 - [ ] [14. Tags — additional to folders, with filtering and saved searches](#14-tags--additional-to-folders-with-filtering-and-saved-searches)
 - [ ] [15. Import/export compatibility across builds](#15-importexport-compatibility-across-builds-mainline--personal-fork)
 - [ ] [16. Gesture-based step advance (shake to advance)](#16-gesture-based-step-advance-shake-to-advance)
+- [ ] [17. Step log in backup/restore, with restore-safe stable ids](#17-step-log-in-backuprestore-with-restore-safe-stable-ids)
 
 Check a box and flip its section's `Status:` line to `done` in the same commit
 that merges the feature branch into `personal`.
@@ -1329,6 +1330,92 @@ Settings toggle (and possibly a sensitivity control).
 **Effort:** not estimated yet — the shake-detection tuning (avoiding false
 positives during actual exercise) is the real unknown, likely more of the
 effort than the plumbing into `increTimer`.
+
+**Status:** not started
+
+**Manual test:** _(fill in after building)_
+
+## 17. Step log in backup/restore, with restore-safe stable ids
+
+Branch: `feat/backup-step-log`
+
+**What:** raised while testing item 6 — does the app's existing backup
+already save everything, would it include the new step log, and would
+restoring a backup duplicate step-log rows? Answers, from actually reading
+the code (not assumed):
+
+- **There's no Google Drive integration anywhere in this codebase, and
+  personal doesn't have cloud backup at all.** The "Backup & Restore" screen
+  (`app-backup`) is local JSON export/import via a plain file picker (SAF) —
+  it can point at a Drive-synced folder on-device, but that's incidental,
+  not an API integration. A real cloud backup does exist, using Firebase
+  Cloud Storage authenticated via Google Sign-In (easy to mistake for "Drive"
+  since it's Google-account-gated) — but it's wired in only for the
+  `google` flavor (`app/src/google/FlavorModule.kt`,
+  `"googleImplementation"(project(":flavor-google"))` in
+  `app/build.gradle.kts`). `personal` doesn't depend on `flavor-google` at
+  all, so this build has no cloud backup of any kind today, local-JSON-only.
+- **The step log is not included in that JSON backup, and never would be
+  automatically.** The backup aggregator (`AppDataEntity`, `domain/.../
+  entities/AppDataEntity.kt`) is a hand-built 6-field DTO (`folders`,
+  `timers`, `notifier`, `timerStamps`, `schedulers`, `prefs`) — there's no
+  generic "back up every table" mechanism. Adding a table means manually
+  touching `AppDataEntity`, its JSON DTO (`AppDataData.kt`), the mapper
+  (`AppDataMapper.kt`), export (`ExportAppData.kt`), and import
+  (`ImportAppData.kt`) — the same pattern `timerStamps` already follows.
+- **Restoring a backup already duplicates data today, for everything, not
+  just a hypothetical for step logs.** `ImportAppData.kt` always inserts
+  with a fresh auto-generated id (`.copy(id = ...NEW_ID)` for folders,
+  timers, schedulers, and timer-stamps alike) — there is no id/content
+  matching against what's already on the device. The only thing preventing
+  duplicates is an optional "wipe existing data first" checkbox (default
+  off for local import; hardcoded on for the Firebase cloud restore path,
+  which is why *that* path happens to not duplicate — not because anything
+  actually dedupes). **This means there's no existing "stable id survives
+  export/import" mechanism in this codebase to copy** — the stable-id/dedup
+  behavior asked for here would be genuinely new, not an extension of how
+  timers or timer-stamps already work today.
+
+**Design (not fully worked out yet):**
+- Give `StepStampEntity` a stable id independent of the local Room
+  auto-increment `id` — e.g. a UUID generated once at record time (in
+  `MachinePresenter.recordStepStamp`/`AddStepStamp`), stored in a new
+  `stableId` column with a `UNIQUE` index. The auto-increment `id` stays
+  purely local-device bookkeeping, as it is today; `stableId` is what
+  survives export/import and is what dedup keys off — this is the "log
+  item id" that lets the importer tell "already restored this exact entry
+  before" apart from "two different entries that happen to share a
+  timestamp," which timestamp/content matching alone can't do.
+- `StepStampDao.add()` would need `onConflict = OnConflictStrategy.IGNORE`
+  keyed on that unique `stableId` index (not the PK, which today's
+  `REPLACE` conflict strategy never actually triggers on for imports, since
+  every imported row gets a fresh id of `0` regardless) — so re-importing a
+  stamp whose `stableId` already exists locally silently no-ops instead of
+  inserting a duplicate row.
+- Wire `stepStamps` into `AppDataEntity`/`AppDataData`/`AppDataMapper`/
+  `ExportAppData`/`ImportAppData`, matching `timerStamps`' existing pattern,
+  minus the "always insert a new id" step — a restored step stamp keeps its
+  original `stableId` and only gets skipped-or-inserted based on it, no
+  `timerId` remapping needed either (unlike timer-stamps, `StepStampEntity`
+  doesn't have a real FK to the timer — see item 6 — so there's nothing to
+  remap on restore).
+- **Explicitly out of scope for this item:** fixing the same
+  always-duplicates-on-restore gap for timers/timer-stamps/schedulers/
+  folders. That's a real gap too, but bigger and riskier to touch (real FK
+  remapping, the wipe-first checkbox's existing semantics) — flagging it
+  here since it was discovered along the way, not proposing to fix it now.
+
+**Touches:** `StepStampEntity.kt` (new `stableId` field) ·
+`StepStampData.kt` (new column + unique index) · new migration ·
+`StepStampDao.add()` (`onConflict` change) · `AppDataEntity.kt` +
+`AppDataData.kt` + `AppDataMapper.kt` (new `stepStamps` field, mirroring
+`timerStamps`) · `ExportAppData.kt` / `ImportAppData.kt` (export/import +
+dedup-on-restore logic) · `MachinePresenter.recordStepStamp` (generate the
+`stableId` at record time).
+
+**Effort:** not estimated yet — mostly plumbing following the `timerStamps`
+precedent, plus the new dedup mechanism (genuinely new to this codebase,
+not a copy of an existing pattern).
 
 **Status:** not started
 
