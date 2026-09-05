@@ -14,7 +14,7 @@ use only (see licensing note at the bottom).
 - [x] [5. QR-scan dismiss](#5-qr-scan-dismiss)
 - [x] [6. Searchable step-level activity log](#6-searchable-step-level-activity-log)
 - [x] [7. Search timers by name](#7-search-timers-by-name)
-- [ ] [8. Import a timer from a JSON file](#8-import-a-timer-from-a-json-file-including-google-drive)
+- [x] [8. Import a timer from a JSON file](#8-import-a-timer-from-a-json-file-including-google-drive)
 - [ ] [9. Composable timers](#9-composable-timers--run-a-saved-timer-as-a-step-n-times)
 - [ ] [10. Local music playlist](#10-local-music-playlist--searchable-persists-across-steps-layers-with-alerts)
 - [ ] [11. Proactive, offline-capable TTS pre-baking](#11-proactive-offline-capable-tts-pre-baking)
@@ -959,20 +959,112 @@ destination instead of clipboard-only import into the currently-open editor.
 **What's new:** `ActivityResultContracts.OpenDocument()` file picker (Drive
 shows up automatically as a document provider, no separate Drive API
 integration) → read the file's text → `ShareTimer.receiveFromString(...)` →
-folder picker (reuse the folder-selection piece already built for
-`TimerPicker.kt`) → `AddTimer` with the chosen `folderId`, as a new entry point
-from the timer list rather than from inside the editor.
+folder picker → `AddTimer` with the chosen `folderId`, as a new entry point
+(the timer list's overflow menu, alongside Records) rather than from inside
+the editor.
 
-**Also do:** once this exists, export one real timer and save the resulting
-JSON into this plan file as a documented example — that's what makes it easy
-to point an AI at later ("generate JSON matching this shape").
+**Correction from the original plan:** `TimerPicker.kt` turned out to be a
+timer picker (folders are just expandable section headers grouping timers),
+not a folder picker — there's no dedicated `FolderPicker.kt`. The actual
+existing "pick a destination folder" UI is the per-timer "Move" context-menu
+action's dialog (`TimerFragment.kt`, `MENU_ID_MOVE` handler) — a plain
+`MaterialAlertDialogBuilder.setItems` over `viewModel.allFolders.value`. That's
+what this reuses for the post-import folder prompt.
 
-**Effort:** 0.5–1 day — small, because the export/import round trip already
-works.
+**Bug found in manual testing, unrelated to import itself:** the imported
+timer's Voice step showed its actual spoken text as the behaviour chip label
+instead of "Voice" (e.g. `Rise, {step_name}.`, unresolved template and all) —
+looked broken, especially next to Beep's/Vibration's clean generated labels.
+Traced to `BehaviourLayoutUtils.kt`'s `getChipText()`: this is how Voice chips
+have **always** rendered in this app, for every Voice behaviour regardless of
+how it was created (editor UI or import alike) — it echoes whatever's in
+`content`/`content2` verbatim, with no variable resolution, falling back to
+the generic "Voice" label only when both are blank. Fixed at your request:
+Voice chips now always show the generic label, "Voice" when unconfigured or
+"Voice \*" once any content is set — matching how Confirm/Count/Notification
+already signal "customized" with a value suffix, just without echoing free
+text. This is a general chip-display fix (all Voice behaviours, not
+import-specific), landed on this branch since it surfaced while testing it.
 
-**Status:** not started
+**Error-message design decision:** `ShareTimer.receiveFromString` catches any
+parse failure and wraps the raw exception unmodified in `Fruit.Rotten`
+(`ShareTimer.kt:40-42`) — the same convention the editor's existing "Create
+from clipboard" error path already follows. First pass mirrored that: show
+`fruit.exception.message`, falling back to a friendly "not a valid timer"
+string only if the exception had no message at all — which in practice is
+almost never, since both Moshi's parse exceptions and this feature's own
+"no timer found in file" exception always carry one, making the friendly
+string effectively unreachable dead code. Flipped per your call: the
+friendly message always wins in the snackbar now; the real exception still
+goes to `AppTracker.trackError` first, so it's not lost, just moved out of
+the user-facing UI and into wherever crash/error tracking already goes.
 
-**Manual test:** _(fill in after building)_
+**Also do, done:** the sample timer used for testing —
+`rubber-duck-debugging-ritual.json` — is checked into the repo root and
+pasted below as the documented example JSON shape.
+
+```json
+{
+  "timers": [
+    {
+      "id": 0,
+      "name": "Rubber Duck Debugging Ritual",
+      "loop": 1,
+      "steps": [
+        {
+          "step_type": "step",
+          "label": "Summon the duck",
+          "length": 5000,
+          "behaviour": [
+            { "type": "VOICE", "content": "Rise, {step_name}." }
+          ]
+        },
+        {
+          "step_type": "step",
+          "label": "Confess the bug out loud",
+          "length": 90000,
+          "behaviour": [
+            { "type": "BEEP", "content": "2,0" },
+            { "type": "VIBRATION" }
+          ]
+        },
+        {
+          "step_type": "step",
+          "label": "Thank the duck and move on",
+          "length": 5000,
+          "behaviour": [
+            { "type": "VOICE", "content": "Bug status: unknown. Duck status: honored." }
+          ]
+        }
+      ]
+    }
+  ]
+}
+```
+
+Fields left out entirely (`folders`, `startStep`/`endStep`, `more`,
+`folderId`, `conditionDays`, behaviour `label`/`loop`, …) fall back to their
+Kotlin defaults via Moshi — a real minimal-viable import file doesn't need to
+specify everything a full export would.
+
+**Effort:** in line with the original 0.5–1 day estimate for the import
+feature itself; the Voice-chip fix was a small, unplanned addition on top,
+discovered during manual testing.
+
+**Status:** done
+
+**Manual test:** built via `scripts/deploy.sh` (`personal` flavor), tested
+against the Android 12 phone (SM-G975U) only — your call, accepted as
+sufficient, same as item 7's Android-16 pass. Confirmed: **Import Timer**
+appears in the timer list's overflow menu, alongside Records; picking
+`rubber-duck-debugging-ritual.json` opens the system file picker, then a
+**Choose a folder** dialog listing the real folders; picking one shows a
+success snackbar naming the timer and drops it into that folder with 3 steps
+and the correct ~1:40 total duration; running it fires Voice → Beep+Vibration
+→ Voice on schedule; backing out of the file picker without picking anything
+is a no-op (no snackbar, no crash); importing a non-timer file shows the
+"not a valid timer" snackbar without crashing. The Voice chip fix above was
+also visually confirmed on-device once redeployed.
 
 ## 9. Composable timers — run a saved timer as a step, N times
 
