@@ -22,6 +22,7 @@ use only (see licensing note at the bottom).
 - [ ] [13. Sound sequencing across behaviors on one step](#13-sound-sequencing-across-behaviors-on-one-step)
 - [ ] [14. Tags — additional to folders, with filtering and saved searches](#14-tags--additional-to-folders-with-filtering-and-saved-searches)
 - [ ] [15. Import/export compatibility across builds](#15-importexport-compatibility-across-builds-mainline--personal-fork)
+- [ ] [16. Gesture-based step advance (shake to advance)](#16-gesture-based-step-advance-shake-to-advance)
 
 Check a box and flip its section's `Status:` line to `done` in the same commit
 that merges the feature branch into `personal`.
@@ -714,47 +715,108 @@ last Tuesday" but not "you confirmed the Ibuprofen step at 2:14 PM" — and it h
 no text search and no record of how a step ended.
 
 **Design:**
-- New `StepStampEntity(id, timerId, timerName, stepName, timestamp, confirmMethod)`
-  where `confirmMethod` is `AUTO` (countdown reached zero) or `MANUAL` (dismissed
-  by hand today; item 5 will add QR as a second manual variant once it exists —
-  worth widening this to `AUTO` / `TAP` / `QR` at that point rather than a single
-  `MANUAL` bucket). `timerName`/`stepName` are stored as plain-text snapshots, not
-  foreign keys — `StepEntity.Step` (`domain/.../entities/StepEntity.kt:8`) has no
-  stable id, only a `label`, and timers/steps can be renamed or deleted later. A
-  snapshot keeps old log entries readable and searchable regardless of later edits,
-  and it's also exactly what full-text search needs to match against.
-- Hook point: `TimerMachine.kt`'s per-step task already distinguishes the two
-  completion paths structurally — `CountDownTimerTask.onFinish()`
-  (`.../stream/task/CountDownTimerTask.kt:38`, fires when the countdown reaches
-  zero — this is "auto") vs `StopwatchTask.onFinish()`
-  (`.../stream/task/StopwatchTask.kt:46`, fires when a HALT step is stopped by an
-  explicit action — this is "manual"). That's the natural place to record a step
-  stamp with its confirm method, alongside (not instead of) the existing
-  timer-level stamp already recorded in `MachinePresenter.end()`.
-- New Room table + DAO (`StepStampDao`): insert, plus a search query —
-  `SELECT * FROM StepStamp WHERE timerName LIKE '%' || :query || '%' OR stepName
-  LIKE '%' || :query || '%' ORDER BY timestamp DESC`.
-- New searchable log screen: a single search box (same pattern as item 7's timer
-  search) over a newest-first list, each row showing date + time, timer name, step
-  name, and how it ended (e.g. an "auto" vs "dismissed" label or icon).
-- No retention/pruning policy for now — personal-scale volume (a handful of steps
-  a day) makes this a non-issue; revisit only if storage or list performance ever
-  becomes noticeable.
+- New `StepStampEntity(id, timerId, timerName, stepName, timestamp, confirmMethod)`,
+  `confirmMethod` a two-way `AUTO` / `MANUAL` enum. `timerName`/`stepName` are
+  stored as plain-text snapshots, not foreign keys — `StepEntity.Step`
+  (`domain/.../entities/StepEntity.kt`) has no stable id, only a `label`, and
+  timers/steps can be renamed or deleted later. A snapshot keeps old log entries
+  readable and searchable regardless of later edits.
+- **Only "Next" (and a QR match, which functions as Next for a QR_SCAN step)
+  counts as a dismissal — confirmed with the user before building.** Pressing
+  "Previous" or jumping to another step via the step list logs nothing. Reasoning:
+  jumping past a step you didn't actually do (e.g. skipping "Stretching" to reach
+  "Cooldown" sooner) would otherwise show up as "done," which defeats the log's
+  purpose of answering "when did I last actually do X." This also settled the
+  original note about widening `confirmMethod` to `AUTO`/`TAP`/`QR` — asked and
+  the user preferred keeping the simpler two-way `MANUAL` bucket QR matches and
+  plain taps alike, since the codebase's own QR-lock guard already distinguishes
+  a real dismissal from a relaunch-the-scanner retry (see below), which was the
+  only case a three-way split would have added anything for.
+- **AUTO's hook point, found by tracing the task lifecycle (nothing like this was
+  documented anywhere):** `TimerMachine.Listener.finished(timerId)` — which
+  `MachinePresenter` already implements — is reachable *only* from
+  `TaskManager.onTaskDone()`, which itself is only ever called by a task's own
+  `onFinish()`. In practice that means only `CountDownTimerTask`'s internal
+  countdown genuinely reaching zero fires it; `StopwatchTask` (HALT) and
+  `TerminalWaitTask` (Confirm/QR_SCAN's terminal wait) never do, since both are
+  always ended manually via `TaskManager.interfere()`. Critically,
+  `onManagerDone` fires *before* `provideNextTask()` advances `currentIndex`, so
+  `timers[id].machine.currentIndex` inside `MachinePresenter.finished()` still
+  names the step that just finished — no extra state needed to know which step
+  to log.
+- **MANUAL has no existing hook at all** — `TaskManager.interfere()` (the path
+  every manual transition goes through: Next, Previous, a step-list jump, a QR
+  match) silently swaps tasks with no "step ended" callback of its own. Rather
+  than add one centrally (which would've meant hooking every caller including
+  Previous/jump, the opposite of the decision above), the recording call was
+  added directly at the two call sites that represent a genuine dismissal:
+  `MachinePresenter.increTimer()` (Next) and `advancePastQrScan()` (QR match) —
+  both capture the step being left *before* calling into `moveTimer`/`toIndex`.
+  `decreTimer()` (Previous) and `moveTimer()` (a direct step-list jump) get no
+  hook at all, by design.
+- `increTimer()` reuses its existing `isCurrentStepQrLocked()` guard before
+  logging: while QR-locked, "Next" only relaunches the scanner as a manual retry
+  and `moveTimer` itself no-ops, so logging unconditionally would have recorded
+  a step as "done" even when nothing actually advanced.
+- **No FK from `StepStamp.timerId` to `TimerItem`, and — unlike `TimerStamp` —
+  `DeleteTimer` does not clean up `StepStamp` rows.** Deliberate: the entire
+  point of snapshotting `timerName`/`stepName` as plain text (see above) is so
+  the log survives the source timer being renamed or deleted; cascading the
+  delete the way `TimerStamp` does would defeat that.
+- New Room table `StepStamp` at `DB_VERSION` 9 (`getMigration8to9`), created the
+  same way `TimerStamp`'s own `getMigration4to5` was — plain `CREATE TABLE` +
+  index, no FK clause per the point above.
+- `StepStampDao.search(query)` — one query, `... WHERE timerName LIKE '%' ||
+  :query || '%' OR stepName LIKE '%' || :query || '%' ORDER BY timestamp DESC`;
+  a blank query returns every stamp.
+- **No `SearchView`/live-filter pattern exists anywhere in this app to copy**
+  (checked before building item 7, which also hasn't been built yet) — the
+  search box is a plain `TextInputLayout` + `EditText` with
+  `addTextChangedListener`, re-querying `SearchStepStamps` on every keystroke.
+  Not debounced: it's a local SQLite `LIKE` query at personal-scale row counts,
+  not worth the extra moving part.
+- New "Step Log" entry in the timer list's overflow menu, mirroring how
+  "Records" is already wired (`RBase.id.dest_step_log`, a plain-list `Fragment`
+  + `HiltViewModel` + `RecyclerView.Adapter` under `app-timer-list/.../steplog/`,
+  closer in shape to `RecordFragment` — no tabs, no FAB — than the
+  create/delete-oriented `SchedulerFragment`).
 
-**Touches:** `StepStampEntity.kt` (domain) · `StepStampRepository` interface + impl
-(data) · new Room entity/DAO + migration · `AddStepStamp` use case ·
-`SearchStepStamps` use case · new ViewModel · new screen (list + search box) ·
-wire the recording call into `TimerMachine.kt`'s per-task completion (or
-`MachinePresenter.kt` at the same point each task finishes) so it fires once per
-step, not just once per full run.
+**Touches:** `StepStampEntity.kt` + `StepStampRepository.kt` +
+`usecases/record/AddStepStamp.kt` + `SearchStepStamps.kt` (domain) ·
+`datas/StepStampData.kt` + `mappers/StepStampMapper.kt` +
+`repositories/StepStampRepositoryImpl.kt` + `db/Daos.kt` (new `StepStampDao`) +
+`db/MachineDatabase.kt` (entity, dao, `DB_VERSION` 9, `getMigration8to9`) +
+`di/RepoModule.kt` (bindings) (data) · `stream/MachinePresenter.kt` (new
+`addStepStamp` dependency, `recordStepStamp` helper, hooks in `finished()` /
+`increTimer()` / `advancePastQrScan()`) + new `steplog/StepLogViewModel.kt`
+(presentation) · new `steplog/StepLogFragment.kt` + `StepLogAdapter.kt` +
+`VisibleStepStamp.kt` + `res/layout/fragment_step_log.xml` +
+`res/layout/item_step_stamp.xml` · `TimerFragment.kt` + `res/menu/timer.xml`
+(menu entry) (app-timer-list) · `res/values/ids.xml` (`dest_step_log`) +
+`res/values/strings.xml` + new `ic_history.xml`/`ic_search.xml` (app-base) ·
+`res/navigation/nav_graph.xml` (app) · `MachinePresenterUnitTest.kt` (the AUTO
+case — `finished()` never touches Android's `Looper`, so it's plain-JVM
+testable) · `MachinePresenterTest.kt` androidTest (the MANUAL/Previous cases —
+`increTimer`/`decreTimer` build a real `Task` via `TimerMachine.toIndex ->
+toTask`, which needs Android's `Looper` and can't run in a plain JVM test) ·
+`MachineDatabaseMigratingTest.kt` (added `getMigration8to9` to the loop).
 
-**Effort:** 2–3 days — a new table/migration, one use-case pair, and one new
-searchable list screen, building on the existing stamp/record pattern already in
-the codebase; smaller than composable timers or the soundtrack feature.
+**Effort:** in line with the original 2–3 day estimate.
 
-**Status:** not started
+**Status:** built, not yet manually tested — needs a device, which this working
+environment didn't have.
 
-**Manual test:** _(fill in after building)_
+**Manual test:** _(pending — build `feat/step-activity-log` via
+`scripts/deploy.sh` (`personal` flavor) on a physical device.
+Unit tests (`./gradlew :presentation:testDebugUnitTest`), `detekt`, and
+`assemblePersonalDebug` are all green from this environment, but the
+**androidTest suite could not run here** (no device/emulator, no `adb`) — run
+`MachinePresenterTest` (`action1` plus the new `stepStampRecording`) and
+`MachineDatabaseMigratingTest` on-device first. Then manually confirm: a step's
+countdown reaching zero logs an "Auto" row; pressing "Next" logs a "Manual" row
+for the step just left; pressing "Previous" or jumping via the step list logs
+nothing; the search box filters live by timer or step name; and a step logged
+before its timer is deleted still shows up in the log afterward.)_
 
 ## 7. Search timers by name
 
@@ -1207,6 +1269,70 @@ will it crash)?"
    unknown *type value*.
 
 **Status:** not started
+
+## 16. Gesture-based step advance (shake to advance)
+
+Branch: `feat/shake-to-advance`
+
+**What:** a device gesture — shaking the phone, likely twice in quick
+succession to distinguish it from incidental movement — advances to the next
+step, as an alternative to tapping "Next" that needs neither looking at the
+screen nor touching it. Aimed at mid-workout use: hands full, sweaty, or eyes
+elsewhere, the same gap the notification/running-screen "Next" button doesn't
+close since both still require looking at and touching the phone.
+
+**Design (not fully worked out yet):**
+- Reads the accelerometer via Android's `SensorManager`
+  (`Sensor.TYPE_ACCELEROMETER` or `TYPE_LINEAR_ACCELERATION`) and needs a real
+  shake-detection algorithm — magnitude/jerk over a short rolling window,
+  above a threshold, with a cooldown so one shake doesn't fire multiple
+  "Next" events. **Double-shake, not single**, specifically because a single
+  shake is too easy to trigger by accident (picking the phone up, normal
+  handling) — the double pattern is the actual gesture being proposed, not
+  just a stylistic choice.
+- **False-positive risk is the central open question**, more than for any
+  other behavior in this fork: unlike QR_SCAN or Confirm, this gesture is
+  meant to fire *without the user looking*, so there's no glance-and-correct
+  safety net if it triggers accidentally. Exercise itself often involves
+  shaking the phone (burpees, jumping jacks, running) — worth deciding
+  whether sensitivity needs to be configurable per timer/step, whether a
+  short cooldown after a step *starts* is needed before the gesture arms
+  (to ignore whatever motion was already happening when the step began), or
+  whether this only makes sense opted into per-timer rather than as a
+  blanket global toggle.
+- **Needs to work whether or not the running screen is open**, the same
+  requirement item 5's QR_SCAN auto-launch bug uncovered: starting a timer
+  from the list, not opening the running screen first, must still arm the
+  gesture — meaning the sensor listener likely needs to live in
+  `MachineService` (the foreground service), not just the running
+  `Activity`/`Fragment`, listening only while a timer is actually running
+  (never at rest, for battery).
+- **Should reuse "Next"'s existing semantics exactly, not invent a parallel
+  path** — same guard against QR_SCAN's lock (a shake while QR-locked should
+  behave like a tap on "Next" already does today: relaunch the scanner as a
+  retry, not bypass the lock), and the same step-stamp logging item 6 added
+  to `increTimer()` (a shake-triggered advance should log the same `MANUAL`
+  stamp a tap does, not a separate confirm method, unless a later look at the
+  data shows that distinction would actually be useful).
+- Global on/off setting seems like the natural home (a workout-specific
+  preference, not a per-step behavior chip like Voice/Beep/Confirm), but
+  worth deciding deliberately rather than defaulting to it — a later look
+  might favor per-timer opt-in instead, given the false-positive question
+  above.
+
+**Touches:** _(sketch out once the false-positive/settings questions above are
+settled)_ likely a new shake-detector class wrapping `SensorManager` ·
+`MachineService.kt` (arm/disarm alongside a running timer) · wherever
+`increTimer` is already called from the service, reused as-is · a new
+Settings toggle (and possibly a sensitivity control).
+
+**Effort:** not estimated yet — the shake-detection tuning (avoiding false
+positives during actual exercise) is the real unknown, likely more of the
+effort than the plumbing into `increTimer`.
+
+**Status:** not started
+
+**Manual test:** _(fill in after building)_
 
 ---
 
