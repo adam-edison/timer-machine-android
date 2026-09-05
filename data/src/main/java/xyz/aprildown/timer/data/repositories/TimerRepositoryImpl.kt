@@ -7,6 +7,7 @@ import xyz.aprildown.timer.data.db.TimerDao
 import xyz.aprildown.timer.data.mappers.TimerInfoMapper
 import xyz.aprildown.timer.data.mappers.TimerMapper
 import xyz.aprildown.timer.data.mappers.fromWithMapper
+import xyz.aprildown.timer.domain.entities.FolderEntity
 import xyz.aprildown.timer.domain.entities.TimerEntity
 import xyz.aprildown.timer.domain.entities.TimerInfo
 import xyz.aprildown.timer.domain.repositories.TimerRepository
@@ -92,6 +93,13 @@ internal class TimerRepositoryImpl @Inject constructor(
 
     override suspend fun getTimerInfo(folderId: Long): List<TimerInfo> {
         return timerDao.getTimerInfo(folderId).fromWithMapper(timerInfoMapper)
+    }
+
+    override suspend fun searchTimerInfo(query: String): List<TimerInfo> {
+        return timerDao.searchTimerInfo(
+            query = query,
+            excludedFolderId = FolderEntity.FOLDER_TRASH,
+        ).fromWithMapper(timerInfoMapper)
     }
 
     override fun getTimerInfoFlow(folderId: Long): Flow<List<TimerInfo>> {

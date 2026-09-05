@@ -141,6 +141,8 @@ class MainActivity :
         binding.drawer.setDrawerLockMode(
             if (currentDestId in setOf(
                     RBase.id.dest_timer,
+                    RBase.id.dest_timer_search,
+                    RBase.id.dest_step_log,
                     RBase.id.dest_scheduler,
                     RBase.id.dest_backup_restore,
                     RBase.id.dest_settings,
@@ -164,6 +166,8 @@ class MainActivity :
                 refreshMainUi(DRAWER_ID_TIMER)
             }
             RBase.id.dest_record -> refreshMainUi(DRAWER_ID_TIMER)
+            RBase.id.dest_timer_search -> refreshMainUi(DRAWER_ID_TIMER_SEARCH)
+            RBase.id.dest_step_log -> refreshMainUi(DRAWER_ID_STEP_LOG)
 
             RBase.id.dest_scheduler -> {
                 requireFab = true
@@ -265,6 +269,18 @@ class MainActivity :
                     withCommonSettings()
                 },
                 PrimaryDrawerItem().apply {
+                    identifier = DRAWER_ID_TIMER_SEARCH
+                    nameRes = RBase.string.main_action_timer_search
+                    iconRes = RBase.drawable.ic_search
+                    withCommonSettings()
+                },
+                PrimaryDrawerItem().apply {
+                    identifier = DRAWER_ID_STEP_LOG
+                    nameRes = RBase.string.main_action_step_log
+                    iconRes = RBase.drawable.ic_history
+                    withCommonSettings()
+                },
+                PrimaryDrawerItem().apply {
                     identifier = DRAWER_ID_SCHEDULER
                     nameRes = RBase.string.main_action_schedulers
                     iconRes = RBase.drawable.ic_scheduler
@@ -340,6 +356,14 @@ class MainActivity :
             val shouldClose = when (item.identifier) {
                 DRAWER_ID_TIMER -> {
                     navigateToMainDestination(RBase.id.dest_timer)
+                    true
+                }
+                DRAWER_ID_TIMER_SEARCH -> {
+                    navigateToMainDestination(RBase.id.dest_timer_search)
+                    true
+                }
+                DRAWER_ID_STEP_LOG -> {
+                    navigateToMainDestination(RBase.id.dest_step_log)
                     true
                 }
                 DRAWER_ID_SCHEDULER -> {
@@ -568,6 +592,8 @@ class MainActivity :
 }
 
 private const val DRAWER_ID_TIMER = 10L
+private const val DRAWER_ID_TIMER_SEARCH = 12L
+private const val DRAWER_ID_STEP_LOG = 14L
 private const val DRAWER_ID_SCHEDULER = 20L
 private const val DRAWER_ID_BACKUP_RESTORE = 25L
 private const val DRAWER_ID_SETTINGS = 50L

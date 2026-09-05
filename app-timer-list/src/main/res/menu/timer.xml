@@ -7,10 +7,4 @@
         android:orderInCategory="10"
         android:title="@string/main_action_record"
         app:showAsAction="ifRoom" />
-    <item
-        android:id="@+id/action_step_log"
-        android:icon="@drawable/ic_history"
-        android:orderInCategory="20"
-        android:title="@string/main_action_step_log"
-        app:showAsAction="never" />
 </menu>

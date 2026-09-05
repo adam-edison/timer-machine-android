@@ -28,6 +28,13 @@ internal interface TimerDao {
     @Query("SELECT id, name, folderId FROM TimerItem WHERE folderId = :folderId")
     suspend fun getTimerInfo(folderId: Long): List<TimerInfoData>
 
+    @Query(
+        "SELECT id, name, folderId FROM TimerItem " +
+            "WHERE name LIKE '%' || :query || '%' AND folderId != :excludedFolderId " +
+            "ORDER BY name"
+    )
+    suspend fun searchTimerInfo(query: String, excludedFolderId: Long): List<TimerInfoData>
+
     @Query("SELECT id, name, folderId FROM TimerItem WHERE folderId = :folderId")
     fun getTimerInfoFlow(folderId: Long): Flow<List<TimerInfoData>>
 
