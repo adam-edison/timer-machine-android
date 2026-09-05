@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import xyz.aprildown.timer.domain.di.MainDispatcher
+import xyz.aprildown.timer.domain.entities.AppDataEntity
 import xyz.aprildown.timer.domain.entities.FolderEntity
 import xyz.aprildown.timer.domain.entities.FolderSortBy
 import xyz.aprildown.timer.domain.entities.TimerEntity
@@ -119,6 +120,9 @@ class TimerViewModel @Inject constructor(
 
     private val _shareStringEvent = MutableLiveData<Event<Fruit<String>>>()
     val shareStringEvent: LiveData<Event<Fruit<String>>> = _shareStringEvent
+
+    private val _importTimerEvent = MutableLiveData<Event<Fruit<TimerEntity>>>()
+    val importTimerEvent: LiveData<Event<Fruit<TimerEntity>>> = _importTimerEvent
 
     val tips: LiveData<Int> = tipManager.getTipFlow(this)
         .asLiveData().distinctUntilChanged()
@@ -256,6 +260,27 @@ class TimerViewModel @Inject constructor(
                     )
                 )
             )
+        }
+    }
+
+    fun importTimerFromJson(content: String) {
+        launch {
+            _importTimerEvent.value = Event(mapImportedTimer(shareTimer.get().receiveFromString(content)))
+        }
+    }
+
+    private fun mapImportedTimer(fruit: Fruit<AppDataEntity?>): Fruit<TimerEntity> {
+        if (fruit is Fruit.Rotten) return fruit
+
+        val timer = (fruit as Fruit.Ripe).data?.timers?.firstOrNull()
+            ?: return Fruit.Rotten(IllegalStateException("No timer found in the selected file."))
+
+        return Fruit.Ripe(timer)
+    }
+
+    fun addImportedTimer(timer: TimerEntity, folderId: Long) {
+        launch {
+            addTimer(timer.copy(id = TimerEntity.NEW_ID, folderId = folderId))
         }
     }
 

@@ -57,6 +57,7 @@
     <string name="main_action_record">Records</string>
     <string name="main_action_step_log">Step Log</string>
     <string name="main_action_timer_search">Search Timers</string>
+    <string name="main_action_import_timer">Import Timer</string>
 
     <!--Step log-->
     <string name="step_log_search_hint">Search timer or step</string>
@@ -67,6 +68,12 @@
     <!--Timer search-->
     <string name="timer_search_hint">Search timers</string>
     <string name="timer_search_empty">No matching timers</string>
+
+    <!--Timer import-->
+    <string name="timer_import_choose_folder">Choose a folder</string>
+    <string name="timer_import_success">Imported \"%1$s\"</string>
+    <string name="timer_import_read_error">Couldn\'t read that file</string>
+    <string name="timer_import_parse_error">That file isn\'t a valid timer</string>
 
     <!--Permission-->
     <string name="perm_rational_floating">To show a floating window, grant the app \"Floating Window\" permission</string>
