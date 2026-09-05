@@ -44,9 +44,8 @@ internal fun BehaviourEntity.getChipText(context: Context): String {
         }
         BehaviourType.VOICE -> {
             val action = toVoiceAction()
-            action.content2.ifBlank {
-                action.content.ifBlank { null }
-            }
+            val hasCustomContent = action.content2.isNotBlank() || action.content.isNotBlank()
+            if (hasCustomContent) "${getDefaultName()} *" else null
         }
         BehaviourType.BEEP -> {
             val count = toBeepAction().count
