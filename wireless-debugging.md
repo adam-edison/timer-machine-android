@@ -19,6 +19,9 @@ phone). Once paired, `scripts/deploy.sh` works over Wi-Fi with no cable.
 2. Tap **"Pair device with pairing code"**. This shows a *pairing* IP:port
    (different from the connect address below) and a 6-digit code —
    both are single-use and regenerate each time you open this screen.
+   **Don't close this popup until the `adb pair` command below succeeds** —
+   closing it invalidates the code/port shown, and you'll have to reopen it
+   and get a fresh one (an easy mistake to make while waiting).
 3. From the Mac:
    ```
    adb pair <pairing-ip>:<pairing-port> <6-digit-code>
