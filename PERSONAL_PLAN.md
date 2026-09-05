@@ -12,7 +12,7 @@ use only (see licensing note at the bottom).
 - [x] [3. Day-of-week condition on a step](#3-day-of-week-condition-on-a-step)
 - [x] [4. Time-of-day range condition](#4-time-of-day-range-condition) — aborted
 - [x] [5. QR-scan dismiss](#5-qr-scan-dismiss)
-- [ ] [6. Searchable step-level activity log](#6-searchable-step-level-activity-log)
+- [x] [6. Searchable step-level activity log](#6-searchable-step-level-activity-log)
 - [ ] [7. Search timers by name](#7-search-timers-by-name)
 - [ ] [8. Import a timer from a JSON file](#8-import-a-timer-from-a-json-file-including-google-drive)
 - [ ] [9. Composable timers](#9-composable-timers--run-a-saved-timer-as-a-step-n-times)
@@ -802,22 +802,42 @@ testable) · `MachinePresenterTest.kt` androidTest (the MANUAL/Previous cases �
 toTask`, which needs Android's `Looper` and can't run in a plain JVM test) ·
 `MachineDatabaseMigratingTest.kt` (added `getMigration8to9` to the loop).
 
+**Bug found running the instrumented suite on-device:** `MachinePresenterTest`
+(androidTest)'s shared `getPresenterView()` helper — used by the pre-existing
+`action1` test — built `AddStepStamp` with an unstubbed mock
+`StepStampRepository`. `action1` already calls `increTimer()`, which now runs
+`recordStepStamp`, hitting that mock's `add()` and getting `null` back
+(Mockito doesn't know a suspend fun's boxed `Int` return should default to
+`0`) — NPE on unboxing. Not a bug in the feature itself, a test double that
+needed updating for the new dependency. Fixed by promoting
+`stepStampRepository` to a class-level field stubbed once in
+`getPresenterView()`, and simplifying the new `stepStampRecording` test to
+reuse it instead of duplicating the setup (`getPresenterView()` also had to
+become `suspend` — it now calls a suspend function via that stub, and every
+call site already runs inside a `runTest` block).
+
 **Effort:** in line with the original 2–3 day estimate.
 
-**Status:** built, not yet manually tested — needs a device, which this working
-environment didn't have.
+**Status:** done
 
-**Manual test:** _(pending — build `feat/step-activity-log` via
-`scripts/deploy.sh` (`personal` flavor) on a physical device.
-Unit tests (`./gradlew :presentation:testDebugUnitTest`), `detekt`, and
-`assemblePersonalDebug` are all green from this environment, but the
-**androidTest suite could not run here** (no device/emulator, no `adb`) — run
-`MachinePresenterTest` (`action1` plus the new `stepStampRecording`) and
-`MachineDatabaseMigratingTest` on-device first. Then manually confirm: a step's
-countdown reaching zero logs an "Auto" row; pressing "Next" logs a "Manual" row
-for the step just left; pressing "Previous" or jumping via the step list logs
-nothing; the search box filters live by timer or step name; and a step logged
-before its timer is deleted still shows up in the log afterward.)_
+**Manual test:** built via `scripts/deploy.sh` / `scripts/clean-deploy.sh`
+over wireless debugging (see `wireless-debugging.md`) on both test phones —
+Android 16 (SM-S901U1) and Android 12 (SM-G975U). `./gradlew
+:presentation:connectedDebugAndroidTest :data:connectedDebugAndroidTest`
+passed on both (`MachinePresenterTest` — `action1` + `stepStampRecording` —
+and `MachineDatabaseMigratingTest`), after the fix above. Manually confirmed
+on both phones: a step's countdown reaching zero logs an "Auto" row; "Next"
+logs a "Manual" row for the step just left; "Previous" and step-list jumps
+log nothing; the search box filters live by timer or step name; a step
+logged before its timer is deleted still shows up afterward.
+
+Also surfaced an unrelated pre-existing bug while testing: a newly created
+timer showed no duration estimate in the list on the Android 12 phone only.
+Traced to stale local app data on that phone (accumulated across many prior
+test builds/migrations), not this feature — confirmed by wiping the app's
+data on both phones (`scripts/clean-deploy.sh`, new as of this testing pass)
+and reproducing cleanly on neither. Not something this branch touches or
+fixes; noted here since it came up during this manual test pass.
 
 ## 7. Search timers by name
 
