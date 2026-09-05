@@ -14,6 +14,13 @@ interface TimerRepository {
     fun getTimerInfoFlow(folderId: Long): Flow<List<TimerInfo>>
     fun getTimersFlow(folderId: Long): Flow<List<TimerEntity>>
     suspend fun getTimerInfo(folderId: Long): List<TimerInfo>
+
+    /**
+     * Newest-name-first is not guaranteed; matches [query] against the timer name across
+     * every folder except the trash. A blank [query] returns every non-trashed timer.
+     */
+    suspend fun searchTimerInfo(query: String): List<TimerInfo>
+
     suspend fun changeTimerFolder(timerId: Int, folderId: Long)
     suspend fun moveFolderTimersToAnother(originalFolderId: Long, targetFolderId: Long)
 }

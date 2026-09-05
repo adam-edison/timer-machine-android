@@ -17,7 +17,9 @@ import xyz.aprildown.timer.data.mappers.TimerInfoMapper
 import xyz.aprildown.timer.data.mappers.TimerMapper
 import xyz.aprildown.timer.data.mappers.TimerMoreMapper
 import xyz.aprildown.timer.domain.TestData
+import xyz.aprildown.timer.domain.entities.FolderEntity
 import xyz.aprildown.timer.domain.entities.TimerEntity
+import xyz.aprildown.timer.domain.entities.toTimerInfo
 import xyz.aprildown.timer.domain.repositories.TimerRepository
 
 class TimerRepositoryImplTest {
@@ -99,6 +101,37 @@ class TimerRepositoryImplTest {
         assertEquals(
             listOf(TestData.fakeTimerSimpleA.copy(id = defaultFolderTimerId)),
             result
+        )
+    }
+
+    @Test
+    fun searchTimerInfo_matchesNameAcrossFolders_excludingTrash() = runTest {
+        // Distinct from both FolderEntity.FOLDER_DEFAULT and FolderEntity.FOLDER_TRASH.
+        val otherFolderId = TestData.fakeTimerSimpleA.folderId + 100
+
+        val alphaId = timerRepository.add(TestData.fakeTimerSimpleA)
+        val bravoId = timerRepository.add(
+            TestData.fakeTimerSimpleB.copy(folderId = otherFolderId)
+        )
+        val trashedId = timerRepository.add(
+            TestData.fakeTimerAdvanced.copy(folderId = FolderEntity.FOLDER_TRASH)
+        )
+
+        assertEquals(
+            listOf(
+                TestData.fakeTimerSimpleA.copy(id = alphaId).toTimerInfo(),
+                TestData.fakeTimerSimpleB.copy(id = bravoId, folderId = otherFolderId).toTimerInfo(),
+            ),
+            timerRepository.searchTimerInfo("Timer")
+        )
+
+        assertEquals(
+            listOf(TestData.fakeTimerSimpleA.copy(id = alphaId).toTimerInfo()),
+            timerRepository.searchTimerInfo("Alpha")
+        )
+
+        assertTrue(
+            timerRepository.searchTimerInfo("Advanced").none { it.id == trashedId }
         )
     }
 }

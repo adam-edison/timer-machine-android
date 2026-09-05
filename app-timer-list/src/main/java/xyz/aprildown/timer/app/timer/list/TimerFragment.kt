@@ -117,11 +117,6 @@ class TimerFragment :
                     .subLevelNavigate(RBase.id.dest_record)
                 true
             }
-            R.id.action_step_log -> {
-                NavHostFragment.findNavController(this)
-                    .subLevelNavigate(RBase.id.dest_step_log)
-                true
-            }
             else -> false
         }
     }
