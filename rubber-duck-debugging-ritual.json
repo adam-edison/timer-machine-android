@@ -1,0 +1,36 @@
+{
+  "timers": [
+    {
+      "id": 0,
+      "name": "Rubber Duck Debugging Ritual",
+      "loop": 1,
+      "steps": [
+        {
+          "step_type": "step",
+          "label": "Summon the duck",
+          "length": 5000,
+          "behaviour": [
+            { "type": "VOICE", "content": "Rise, {step_name}." }
+          ]
+        },
+        {
+          "step_type": "step",
+          "label": "Confess the bug out loud",
+          "length": 90000,
+          "behaviour": [
+            { "type": "BEEP", "content": "2,0" },
+            { "type": "VIBRATION" }
+          ]
+        },
+        {
+          "step_type": "step",
+          "label": "Thank the duck and move on",
+          "length": 5000,
+          "behaviour": [
+            { "type": "VOICE", "content": "Bug status: unknown. Duck status: honored." }
+          ]
+        }
+      ]
+    }
+  ]
+}

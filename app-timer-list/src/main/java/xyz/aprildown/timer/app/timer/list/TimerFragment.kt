@@ -5,6 +5,7 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.ServiceConnection
 import android.graphics.Typeface
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.IBinder
@@ -62,12 +63,15 @@ import xyz.aprildown.timer.app.timer.list.databinding.ViewTipMissedTimerBinding
 import xyz.aprildown.timer.app.timer.list.databinding.ViewTipWhitelistBinding
 import xyz.aprildown.timer.domain.entities.FolderEntity
 import xyz.aprildown.timer.domain.entities.FolderSortBy
+import xyz.aprildown.timer.domain.entities.TimerEntity
 import xyz.aprildown.timer.domain.usecases.Fruit
 import xyz.aprildown.timer.domain.usecases.home.TipManager
+import xyz.aprildown.timer.domain.utils.AppTracker
 import xyz.aprildown.timer.presentation.stream.MachineContract
 import xyz.aprildown.timer.presentation.stream.StreamState
 import xyz.aprildown.timer.presentation.timer.TimerViewModel
 import xyz.aprildown.tools.helper.safeSharedPreference
+import java.io.IOException
 import javax.inject.Inject
 import xyz.aprildown.timer.app.base.R as RBase
 
@@ -85,6 +89,9 @@ class TimerFragment :
     @Inject
     lateinit var appNavigator: AppNavigator
 
+    @Inject
+    lateinit var appTracker: AppTracker
+
     private var isBind = false
 
     private var contextMenuItemPosition = RecyclerView.NO_POSITION
@@ -95,6 +102,12 @@ class TimerFragment :
     private var postNotificationsLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) {}
+
+    private val importTimerLauncher = registerForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        uri?.let(::readAndImportTimer)
+    }
 
     override fun onAttach(context: Context) {
         super.onAttach(context)
@@ -115,6 +128,10 @@ class TimerFragment :
             R.id.action_record -> {
                 NavHostFragment.findNavController(this)
                     .subLevelNavigate(RBase.id.dest_record)
+                true
+            }
+            R.id.action_import_timer -> {
+                importTimerLauncher.launch(arrayOf("*/*"))
                 true
             }
             else -> false
@@ -509,6 +526,44 @@ class TimerFragment :
         }
     }
 
+    private fun readAndImportTimer(uri: Uri) {
+        val content = readTextFromUri(uri)
+        if (content == null) {
+            mainCallback.snackbarView.snackbar(getString(RBase.string.timer_import_read_error))
+            return
+        }
+        viewModel.importTimerFromJson(content)
+    }
+
+    private fun readTextFromUri(uri: Uri): String? {
+        return try {
+            requireContext().contentResolver.openInputStream(uri)
+                ?.bufferedReader()
+                ?.use { it.readText() }
+        } catch (ioError: IOException) {
+            appTracker.trackError(ioError)
+            null
+        }
+    }
+
+    private fun promptImportFolder(timer: TimerEntity) {
+        val allFolders = viewModel.allFolders.value ?: return
+        MaterialAlertDialogBuilder(requireContext())
+            .setTitle(RBase.string.timer_import_choose_folder)
+            .setItems(
+                allFolders
+                    .map { it.getDisplayName(requireContext()) }
+                    .toTypedArray()
+            ) { _, which ->
+                viewModel.addImportedTimer(timer, allFolders[which].id)
+                mainCallback.snackbarView.snackbar(
+                    getString(RBase.string.timer_import_success, timer.name)
+                )
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
     private fun setUpObservers() {
         viewModel.editEvent.observeEvent(viewLifecycleOwner) {
             mainCallback.enterEditScreen(
@@ -526,6 +581,15 @@ class TimerFragment :
                 }
                 is Fruit.Rotten -> {
                     mainCallback.snackbarView.snackbar(fruit.exception.message.toString())
+                }
+            }
+        }
+        viewModel.importTimerEvent.observeEvent(viewLifecycleOwner) { fruit ->
+            when (fruit) {
+                is Fruit.Ripe -> promptImportFolder(fruit.data)
+                is Fruit.Rotten -> {
+                    appTracker.trackError(fruit.exception)
+                    mainCallback.snackbarView.snackbar(getString(RBase.string.timer_import_parse_error))
                 }
             }
         }

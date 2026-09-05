@@ -7,4 +7,10 @@
         android:orderInCategory="10"
         android:title="@string/main_action_record"
         app:showAsAction="ifRoom" />
+    <item
+        android:id="@+id/action_import_timer"
+        android:icon="@drawable/settings_import"
+        android:orderInCategory="20"
+        android:title="@string/main_action_import_timer"
+        app:showAsAction="never" />
 </menu>
