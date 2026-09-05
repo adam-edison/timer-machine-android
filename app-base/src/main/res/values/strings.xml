@@ -55,6 +55,13 @@
     <string name="main_action_settings">Settings</string>
     <string name="main_action_dark">Dark Theme</string>
     <string name="main_action_record">Records</string>
+    <string name="main_action_step_log">Step Log</string>
+
+    <!--Step log-->
+    <string name="step_log_search_hint">Search timer or step</string>
+    <string name="step_log_empty">No matching steps logged yet</string>
+    <string name="step_log_method_auto">Auto</string>
+    <string name="step_log_method_manual">Manual</string>
 
     <!--Permission-->
     <string name="perm_rational_floating">To show a floating window, grant the app \"Floating Window\" permission</string>

@@ -14,6 +14,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 import xyz.aprildown.timer.data.datas.FolderData
 import xyz.aprildown.timer.data.datas.SchedulerData
 import xyz.aprildown.timer.data.datas.StepData
+import xyz.aprildown.timer.data.datas.StepStampData
 import xyz.aprildown.timer.data.datas.TimerData
 import xyz.aprildown.timer.data.datas.TimerStampData
 import xyz.aprildown.timer.domain.entities.FolderEntity
@@ -25,6 +26,7 @@ import xyz.aprildown.timer.domain.entities.SchedulerRepeatMode
         FolderData::class,
         SchedulerData::class,
         TimerStampData::class,
+        StepStampData::class,
     ],
     version = MachineDatabase.DB_VERSION,
     exportSchema = true
@@ -41,12 +43,13 @@ abstract class MachineDatabase : RoomDatabase() {
     internal abstract fun folderDao(): FolderDao
     internal abstract fun schedulerDao(): SchedulerDao
     internal abstract fun timerStampDao(): TimerStampDao
+    internal abstract fun stepStampDao(): StepStampDao
 
     companion object {
         @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
         const val DB_NAME = "timer_db"
 
-        const val DB_VERSION = 8
+        const val DB_VERSION = 9
 
         private fun Builder<MachineDatabase>.addMyMigrations(): Builder<MachineDatabase> {
             addMigrations(getMigration1to2())
@@ -56,6 +59,7 @@ abstract class MachineDatabase : RoomDatabase() {
             addMigrations(getMigration5to6())
             addMigrations(getMigration6to7())
             addMigrations(getMigration7to8())
+            addMigrations(getMigration8to9())
             return this
         }
 
@@ -220,6 +224,27 @@ abstract class MachineDatabase : RoomDatabase() {
                         "(`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `name` TEXT NOT NULL)"
                 )
                 addHostFolders(db)
+            }
+        }
+
+        /**
+         * Add the new StepStamp table (item 6's per-step activity log).
+         */
+        @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
+        fun getMigration8to9(): Migration = object : Migration(8, 9) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `StepStamp` " +
+                        "(`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`timerId` INTEGER NOT NULL, " +
+                        "`timerName` TEXT NOT NULL, " +
+                        "`stepName` TEXT NOT NULL, " +
+                        "`timestamp` INTEGER NOT NULL, " +
+                        "`confirmMethod` TEXT NOT NULL)"
+                )
+                db.execSQL(
+                    "CREATE INDEX `index_StepStamp_timerId` ON `StepStamp` (`timerId`)"
+                )
             }
         }
     }

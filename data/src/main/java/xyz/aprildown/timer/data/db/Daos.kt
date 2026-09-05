@@ -9,6 +9,7 @@ import androidx.room.Update
 import kotlinx.coroutines.flow.Flow
 import xyz.aprildown.timer.data.datas.FolderData
 import xyz.aprildown.timer.data.datas.SchedulerData
+import xyz.aprildown.timer.data.datas.StepStampData
 import xyz.aprildown.timer.data.datas.TimerData
 import xyz.aprildown.timer.data.datas.TimerInfoData
 import xyz.aprildown.timer.data.datas.TimerStampData
@@ -115,4 +116,18 @@ internal interface TimerStampDao {
 
     @Query("DELETE FROM TimerStamp WHERE id = :id")
     suspend fun deleteTimerStamp(id: Int): Int
+}
+
+@Dao
+internal interface StepStampDao {
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun add(stamp: StepStampData): Long
+
+    @Query(
+        "SELECT * FROM StepStamp " +
+            "WHERE timerName LIKE '%' || :query || '%' OR stepName LIKE '%' || :query || '%' " +
+            "ORDER BY timestamp DESC"
+    )
+    suspend fun search(query: String): List<StepStampData>
 }

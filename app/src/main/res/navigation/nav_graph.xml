@@ -17,6 +17,12 @@
         tools:layout="@layout/fragment_record" />
 
     <fragment
+        android:id="@id/dest_step_log"
+        android:name="xyz.aprildown.timer.app.timer.list.steplog.StepLogFragment"
+        android:label="@string/main_action_step_log"
+        tools:layout="@layout/fragment_step_log" />
+
+    <fragment
         android:id="@id/dest_scheduler"
         android:name="xyz.aprildown.timer.app.scheduler.SchedulerFragment"
         android:label="@string/main_action_schedulers"
