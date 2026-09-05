@@ -9,6 +9,7 @@ import dagger.hilt.components.SingletonComponent
 import xyz.aprildown.timer.data.db.FolderDao
 import xyz.aprildown.timer.data.db.MachineDatabase
 import xyz.aprildown.timer.data.db.SchedulerDao
+import xyz.aprildown.timer.data.db.StepStampDao
 import xyz.aprildown.timer.data.db.TimerDao
 import xyz.aprildown.timer.data.db.TimerStampDao
 import xyz.aprildown.timer.data.repositories.AppDataRepositoryImpl
@@ -17,6 +18,7 @@ import xyz.aprildown.timer.data.repositories.NotifierRepositoryImpl
 import xyz.aprildown.timer.data.repositories.PreferencesRepoImpl
 import xyz.aprildown.timer.data.repositories.SchedulerExecutorImpl
 import xyz.aprildown.timer.data.repositories.SchedulerRepositoryImpl
+import xyz.aprildown.timer.data.repositories.StepStampRepositoryImpl
 import xyz.aprildown.timer.data.repositories.TimerRepositoryImpl
 import xyz.aprildown.timer.data.repositories.TimerStampRepositoryImpl
 import xyz.aprildown.timer.domain.repositories.AppDataRepository
@@ -25,6 +27,7 @@ import xyz.aprildown.timer.domain.repositories.NotifierRepository
 import xyz.aprildown.timer.domain.repositories.PreferencesRepository
 import xyz.aprildown.timer.domain.repositories.SchedulerExecutor
 import xyz.aprildown.timer.domain.repositories.SchedulerRepository
+import xyz.aprildown.timer.domain.repositories.StepStampRepository
 import xyz.aprildown.timer.domain.repositories.TimerRepository
 import xyz.aprildown.timer.domain.repositories.TimerStampRepository
 
@@ -54,6 +57,9 @@ internal abstract class RepoModule {
     abstract fun bindTimerStampRepo(repo: TimerStampRepositoryImpl): TimerStampRepository
 
     @Binds
+    abstract fun bindStepStampRepo(repo: StepStampRepositoryImpl): StepStampRepository
+
+    @Binds
     abstract fun bindPreferencesRepo(repo: PreferencesRepoImpl): PreferencesRepository
 
     companion object {
@@ -79,6 +85,12 @@ internal abstract class RepoModule {
         @Provides
         fun provideTimerStampDao(database: MachineDatabase): TimerStampDao {
             return database.timerStampDao()
+        }
+
+        @Reusable
+        @Provides
+        fun provideStepStampDao(database: MachineDatabase): StepStampDao {
+            return database.stepStampDao()
         }
     }
 }

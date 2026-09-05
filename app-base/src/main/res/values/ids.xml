@@ -2,6 +2,7 @@
 <resources>
     <item name="dest_timer" type="id" />
     <item name="dest_record" type="id" />
+    <item name="dest_step_log" type="id" />
     <item name="dest_scheduler" type="id" />
     <item name="dest_edit_scheduler" type="id" />
     <item name="dest_backup_restore" type="id" />

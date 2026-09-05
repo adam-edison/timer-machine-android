@@ -3,16 +3,24 @@ package xyz.aprildown.timer.presentation.stream
 import android.net.Uri
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.mockito.kotlin.any
+import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.verify
+import org.mockito.kotlin.whenever
 import xyz.aprildown.timer.domain.TestData
 import xyz.aprildown.timer.domain.entities.FlashlightAction
+import xyz.aprildown.timer.domain.entities.StepStampEntity
 import xyz.aprildown.timer.domain.entities.TimerEntity
 import xyz.aprildown.timer.domain.entities.TimerMoreEntity
+import xyz.aprildown.timer.domain.repositories.StepStampRepository
+import xyz.aprildown.timer.domain.usecases.record.AddStepStamp
 import xyz.aprildown.timer.domain.usecases.record.AddTimerStamp
 import xyz.aprildown.timer.domain.usecases.timer.GetTimer
 
@@ -36,12 +44,53 @@ class MachinePresenterUnitTest {
             mock(),
             GetTimer(dispatcher, mock()),
             AddTimerStamp(dispatcher, mock(), mock(), mock()),
+            AddStepStamp(dispatcher, mock(), mock()),
             mock(),
             mock(),
         )
         machine.takeView(MachineTestView())
         return machine
     }
+
+    private fun TestScope.getMachineWithStepStampRepository(
+        repository: StepStampRepository
+    ): MachinePresenter {
+        val dispatcher = StandardTestDispatcher(testScheduler)
+        return MachinePresenter(
+            dispatcher,
+            mock(),
+            GetTimer(dispatcher, mock()),
+            AddTimerStamp(dispatcher, mock(), mock(), mock()),
+            AddStepStamp(dispatcher, repository, mock()),
+            mock(),
+            mock(),
+        )
+    }
+
+    @Test
+    fun `step stamp, a step's countdown reaching zero records AUTO`() = runTest {
+        val repository: StepStampRepository = mock()
+        whenever(repository.add(any())).thenReturn(1)
+        val machine = getMachineWithStepStampRepository(repository)
+        val id = TestData.fakeTimerSimpleB.toMachineTimers(machine).id
+
+        // fakeTimerSimpleB's TimerMachine starts on its startStep (fakeStepA) before
+        // anything else runs — finished() fires exactly like a natural countdown-to-zero
+        // would, without needing to actually drive the countdown.
+        machine.finished(id)
+        advanceUntilIdle()
+
+        val captor = argumentCaptor<StepStampEntity>()
+        verify(repository).add(captor.capture())
+        assertEquals(
+            StepStampEntity.ConfirmMethod.AUTO to TestData.fakeStepA.label,
+            captor.firstValue.confirmMethod to captor.firstValue.stepName
+        )
+    }
+
+    // increTimer()/decreTimer() build a real Task backed by Android's Looper (via
+    // TimerMachine.toIndex -> toTask), which this plain JVM unit test can't provide — see
+    // MachinePresenterTest (androidTest) for the MANUAL/Previous coverage of those.
 
     @Test
     fun `NotifState, yes1 start, yes1 end`() = runTest {

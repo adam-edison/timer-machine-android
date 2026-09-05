@@ -15,6 +15,7 @@ import xyz.aprildown.timer.domain.entities.ConfirmAction
 import xyz.aprildown.timer.domain.entities.FolderEntity
 import xyz.aprildown.timer.domain.entities.HalfAction
 import xyz.aprildown.timer.domain.entities.QrScanAction
+import xyz.aprildown.timer.domain.entities.StepStampEntity
 import xyz.aprildown.timer.domain.entities.StepType
 import xyz.aprildown.timer.domain.entities.TimerEntity
 import xyz.aprildown.timer.domain.entities.TimerStampEntity
@@ -32,6 +33,7 @@ import xyz.aprildown.timer.domain.entities.toVibrationAction
 import xyz.aprildown.timer.domain.entities.toVoiceAction
 import xyz.aprildown.timer.domain.repositories.PreferencesRepository
 import xyz.aprildown.timer.domain.repositories.TaskerEventTrigger
+import xyz.aprildown.timer.domain.usecases.record.AddStepStamp
 import xyz.aprildown.timer.domain.usecases.record.AddTimerStamp
 import xyz.aprildown.timer.domain.usecases.timer.GetTimer
 import xyz.aprildown.timer.domain.utils.AppTracker
@@ -47,6 +49,7 @@ class MachinePresenter @Inject constructor(
     private val prefRepo: PreferencesRepository,
     private val getTimer: GetTimer,
     private val addTimerStamp: AddTimerStamp,
+    private val addStepStamp: AddStepStamp,
     private val appTracker: AppTracker,
     private val taskerEventTrigger: TaskerEventTrigger,
 ) : MachineContract.Presenter, TimerMachine.Listener {
@@ -224,6 +227,8 @@ class MachinePresenter @Inject constructor(
     override fun advancePastQrScan(timerId: Int) {
         timers[timerId]?.run {
             val current = machine.currentIndex
+            // Always a genuine dismissal: this path only runs after a scan already matched.
+            recordStepStamp(timerId, timer, current, StepStampEntity.ConfirmMethod.MANUAL)
             if (current == timer.getLastIndex()) {
                 resetTimer(timerId)
             } else {
@@ -250,6 +255,12 @@ class MachinePresenter @Inject constructor(
     override fun increTimer(timerId: Int) {
         timers[timerId]?.run {
             val current = machine.currentIndex
+            // moveTimer silently no-ops while QR-locked, so only log a dismissal when this
+            // "Next" press will actually move the step along, not when it's just relaunching
+            // the scanner as a manual retry.
+            if (!isCurrentStepQrLocked(timerId)) {
+                recordStepStamp(timerId, timer, current, StepStampEntity.ConfirmMethod.MANUAL)
+            }
             if (current == timer.getLastIndex()) {
                 resetTimer(timerId)
             } else {
@@ -257,6 +268,25 @@ class MachinePresenter @Inject constructor(
                     getNextIndexWithStep(timer.steps, timer.loop, machine.currentIndex)
                 moveTimer(timerId, index)
             }
+        }
+    }
+
+    private fun recordStepStamp(
+        timerId: Int,
+        timer: TimerEntity,
+        index: TimerIndex,
+        confirmMethod: StepStampEntity.ConfirmMethod
+    ) {
+        val step = timer.getStep(index) ?: return
+        fireAndForget(mainDispatcher) {
+            addStepStamp.execute(
+                StepStampEntity(
+                    timerId = timerId,
+                    timerName = timer.name,
+                    stepName = step.label,
+                    confirmMethod = confirmMethod
+                )
+            )
         }
     }
 
@@ -650,6 +680,12 @@ class MachinePresenter @Inject constructor(
 
     override fun finished(timerId: Int) {
         stopBehaviours()
+
+        // The just-finished step: TimerMachine fires finished() before advancing
+        // currentIndex, and only ever from a countdown genuinely reaching zero.
+        timers[timerId]?.let { (timer, machine) ->
+            recordStepStamp(timerId, timer, machine.currentIndex, StepStampEntity.ConfirmMethod.AUTO)
+        }
 
         listeners[timerId]?.forEach { it.finished(0) }
         allListeners.forEach { it.finished(timerId) }

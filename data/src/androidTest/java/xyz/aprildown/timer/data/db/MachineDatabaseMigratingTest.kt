@@ -44,6 +44,7 @@ class MachineDatabaseMigratingTest {
             MachineDatabase.getMigration5to6(),
             MachineDatabase.getMigration6to7(),
             MachineDatabase.getMigration7to8(),
+            MachineDatabase.getMigration8to9(),
         )
         testHelper.closeWhenFinished(db)
     }

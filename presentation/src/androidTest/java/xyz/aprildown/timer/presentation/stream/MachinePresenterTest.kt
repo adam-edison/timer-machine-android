@@ -7,18 +7,25 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.mockito.kotlin.any
+import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import xyz.aprildown.timer.domain.TestData
 import xyz.aprildown.timer.domain.entities.FlashlightAction
+import xyz.aprildown.timer.domain.entities.StepStampEntity
 import xyz.aprildown.timer.domain.entities.TimerEntity
 import xyz.aprildown.timer.domain.repositories.AppDataRepository
+import xyz.aprildown.timer.domain.repositories.StepStampRepository
 import xyz.aprildown.timer.domain.repositories.TimerRepository
+import xyz.aprildown.timer.domain.usecases.record.AddStepStamp
 import xyz.aprildown.timer.domain.usecases.record.AddTimerStamp
 import xyz.aprildown.timer.domain.usecases.timer.GetTimer
 import kotlin.time.Duration.Companion.minutes
@@ -29,14 +36,19 @@ class MachinePresenterTest {
 
     private val timerRepository: TimerRepository = mock()
     private val appDataRepository: AppDataRepository = mock()
+    private val stepStampRepository: StepStampRepository = mock()
 
-    private fun getPresenterView(): Pair<MachinePresenter, TestView> {
+    private suspend fun getPresenterView(): Pair<MachinePresenter, TestView> {
         val dispatcher = Dispatchers.Main.immediate
+        // increTimer()/advancePastQrScan() call this repository's add() to record a step
+        // stamp — an unstubbed mock's suspend fun returns null, NPE-ing when unboxed to Int.
+        whenever(stepStampRepository.add(any())).thenReturn(1)
         val presenter = MachinePresenter(
             dispatcher,
             mock(),
             GetTimer(dispatcher, timerRepository),
             AddTimerStamp(dispatcher, mock(), mock(), appDataRepository),
+            AddStepStamp(dispatcher, stepStampRepository, appDataRepository),
             mock(),
             mock(),
         )
@@ -111,6 +123,37 @@ class MachinePresenterTest {
             assertFalse(view.vibrating)
             assertFalse(view.showingScreen)
             assertFalse(view.reading)
+        }
+    }
+
+    @Test
+    fun stepStampRecording() = runTest(timeout = 1.minutes) {
+        val (presenter, view) = getPresenterView()
+
+        val t = TestData.fakeTimerSimpleB
+        val id = t.id
+        whenever(timerRepository.item(id)).thenReturn(t)
+        withContext(Dispatchers.Main) {
+            presenter.startTimer(id)
+            delay(100)
+
+            // Starts on fakeStepA (the timer's startStep) — "Next" leaves it and should
+            // log a MANUAL stamp for it.
+            presenter.increTimer(id)
+            delay(100)
+            val captor = argumentCaptor<StepStampEntity>()
+            verify(stepStampRepository).add(captor.capture())
+            assertEquals(
+                StepStampEntity.ConfirmMethod.MANUAL to TestData.fakeStepA.label,
+                captor.firstValue.confirmMethod to captor.firstValue.stepName
+            )
+
+            // "Previous" doesn't log anything — still exactly the one stamp from above.
+            presenter.decreTimer(id)
+            delay(100)
+            verify(stepStampRepository, times(1)).add(any())
+
+            presenter.resetTimer(id)
         }
     }
 
