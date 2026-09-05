@@ -989,15 +989,67 @@ threshold the track is flagged unresolved rather than guessing — the rest of
 the playlist keeps playing, and the unresolved track surfaces somewhere you
 can manually reselect it on that device.
 
-**Touches:** new runtime permission · `MediaStore` query + search UI · new
-playlist entity/DB table · fuzzy-match utility (normalize + weighted
-similarity scoring) · a player component with its own lifecycle independent
-of step advancement · manual-duck logic layered onto the existing audio-focus/
-beep/TTS path.
+**Multiple playlists, chosen at random — not just one big shuffled pool.**
+Raised after building the first draft of this design: instead of a single
+Soundtrack playlist per timer, support a *list of named playlists* (e.g.
+"High Energy", "Chill", "Sunday Long Run"), where the timer picks one at
+random each run rather than always playing the same pool shuffled. This is
+a different axis from shuffle — shuffle randomizes track *order* within one
+playlist; this randomizes *which playlist* plays at all, so two different
+runs of the same timer can have entirely different music identities, not
+just a different track order through the same songs. A timer's Soundtrack
+setting becomes "one or more playlists" instead of "one playlist," with a
+per-timer toggle for "pick one at random each run" vs. "always use this
+specific one" (relevant once there's more than one attached).
 
-**Effort:** 4–6 days — fuzzy re-matching adds a bit over the original
-estimate, real on-device audio testing still required (OEM quirks are common
-here) — the biggest single item in this batch.
+**Per-step Music behavior's interaction with a running Soundtrack —
+configurable, not just one hardcoded behavior.** The existing (already
+shipped, pre-fork) step-level **Music** behavior — a step playing its own
+one-off track or sound, separate from this item's timer-wide Soundtrack —
+currently has no defined interaction with a Soundtrack once one exists,
+since Soundtrack doesn't exist yet. Once it does, a step's own Music
+behavior needs a per-step-configurable mode for what happens to the
+Soundtrack while that step's music plays, picked from the Music behavior's
+own settings (the same "pill" UI already used to configure it):
+1. **Default — pause, play, rewind-and-resume.** Soundtrack pauses, the
+   step's own music plays until the step ends, then the Soundtrack seeks
+   back a configurable number of seconds (default 10 — picking up a few
+   seconds before where it left off, not exactly where, so the interruption
+   doesn't create a hard skip) and resumes.
+2. **Pause and resume, no rewind.** Same pause/resume shape as the default,
+   but the Soundtrack simply resumes from exactly where it paused — no
+   seek-back. For someone who'd rather not repeat the tail end of whatever
+   was playing.
+3. **Duck, never pause.** The Soundtrack keeps playing throughout the
+   step's own music — instead of pausing, its volume drops to a
+   configurable level (a percentage, or a dB attenuation — decide format
+   when building) for the step's duration, then returns to full volume
+   once the step ends. No pause/resume/seek logic needed at all for this
+   mode; the Soundtrack's transport state never changes, only its volume.
+
+Each mode's own numeric knob (rewind-seconds for #1, duck-level for #3) is
+part of that step's Music behavior configuration, not a single global
+setting — different steps in the same timer could reasonably want
+different behavior (e.g. a strength step ducks quietly under a cue, a
+whole-song step pauses the Soundtrack entirely).
+
+**Touches:** new runtime permission · `MediaStore` query + search UI · new
+playlist entity/DB table, now a table of playlists (each with its own track
+list) rather than one flat list, plus a per-timer "playlists" association
+and a random-vs-fixed selection flag · fuzzy-match utility (normalize +
+weighted similarity scoring) · a player component with its own lifecycle
+independent of step advancement · manual-duck logic layered onto the
+existing audio-focus/beep/TTS path · the step-level Music behavior's
+existing settings UI (new interaction-mode picker + its numeric field) ·
+wiring the chosen mode into however the Soundtrack player is
+paused/resumed/ducked when a step's own Music behavior fires.
+
+**Effort:** 4–6 days, likely more now — fuzzy re-matching already added a bit
+over the original estimate, and multiple-playlists-with-random-pick plus the
+three-mode step/Soundtrack interaction (each with its own numeric setting)
+both add real scope on top of that; real on-device audio testing still
+required (OEM quirks are common here) — the biggest single item in this
+batch.
 
 **Status:** not started
 
