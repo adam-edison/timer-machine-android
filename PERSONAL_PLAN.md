@@ -13,7 +13,7 @@ use only (see licensing note at the bottom).
 - [x] [4. Time-of-day range condition](#4-time-of-day-range-condition) — aborted
 - [x] [5. QR-scan dismiss](#5-qr-scan-dismiss)
 - [x] [6. Searchable step-level activity log](#6-searchable-step-level-activity-log)
-- [ ] [7. Search timers by name](#7-search-timers-by-name)
+- [x] [7. Search timers by name](#7-search-timers-by-name)
 - [ ] [8. Import a timer from a JSON file](#8-import-a-timer-from-a-json-file-including-google-drive)
 - [ ] [9. Composable timers](#9-composable-timers--run-a-saved-timer-as-a-step-n-times)
 - [ ] [10. Local music playlist](#10-local-music-playlist--searchable-persists-across-steps-layers-with-alerts)
@@ -843,21 +843,103 @@ fixes; noted here since it came up during this manual test pass.
 
 Branch: `feat/timer-search`
 
-**What:** a search field in the timer list toolbar, live-filtering by name.
+**What:** a search-by-name screen off the left drawer, live-filtering.
 **Global** — searches every timer in every folder regardless of which folder
-you're currently viewing, not just the current folder's contents.
+you're currently viewing, not just the current folder's contents. Tapping a
+result opens that timer's running screen directly, same as tapping it from
+the main list.
 
-**Touches:** new DAO query (`SELECT id, name, folderId FROM TimerItem WHERE name
-LIKE '%' || :query || '%'`, folder-independent) · repository/use-case wrapper ·
-`TimerViewModel` (search query state, switches the list source between
-per-folder browsing and the global search results while a query is active) ·
-toolbar `SearchView` in `TimerFragment`.
+**Design call, made mid-build: no toolbar `SearchView`, and both this and
+Step Log (item 6) moved into the left drawer as their own top-level screens.**
+The original plan called for a toolbar `SearchView` inline on the main timer
+list. Building item 6 first had already established that no
+`SearchView`/live-filter pattern existed anywhere in this codebase to copy —
+Step Log used a plain `TextInputLayout` + `EditText` with
+`addTextChangedListener` instead, on its own screen off the list's overflow
+menu. Revisited once actually building this feature: since search is global
+(every folder, not the current one) it doesn't belong bolted onto the
+per-folder list screen at all, regardless of which search-box widget is
+used — it's its own concern, same as Step Log already was. Both moved into
+the left drawer as top-level screens (their own `PrimaryDrawerItem`, back
+arrow instead of hamburger, drawer unlocked on them — same treatment as
+Schedulers/Backup/Settings/Help), reusing item 6's `TextInputLayout` search
+box pattern for consistency rather than introducing `SearchView` as a second,
+one-off pattern. Step Log's entry point moved from the timer list's overflow
+menu to the drawer alongside it; its own screen is unchanged.
 
-**Effort:** 0.5–1 day.
+**Design:**
+- `TimerRepository.searchTimerInfo(query)` — one new DAO query (`SELECT id,
+  name, folderId FROM TimerItem WHERE name LIKE '%' || :query || '%' AND
+  folderId != :excludedFolderId ORDER BY name`), always excluding the trash
+  folder so a deleted timer doesn't resurface in results looking live. A
+  blank query returns every non-trashed timer, same "blank means everything"
+  convention as item 6's `StepStampDao.search`.
+- New `SearchTimers` use case, mirroring `SearchStepStamps`'s shape exactly.
+- New `TimerSearchViewModel` (`presentation/.../timersearch/`) — separate
+  from `TimerViewModel`, since this is a standalone screen, not a mode of the
+  main list. Exposes the raw search results plus the full folder list
+  (`GetFolders`) so the screen can resolve each result's folder display name;
+  formatting (via `FolderEntity.getDisplayName(context)`, which needs a
+  `Context` for the default/trash folder's localized names) stays in the
+  Fragment, not the ViewModel.
+- New `TimerSearchFragment` + `TimerSearchAdapter` + `VisibleTimerSearchResult`
+  (`app-timer-list/.../timersearch/`), same shape as item 6's
+  `StepLogFragment`/`StepLogAdapter`/`VisibleStepStamp` — a search box above a
+  plain `RecyclerView`, each row showing the timer's name and which folder
+  it's in. Unlike Step Log's read-only rows, each row is tappable
+  (`MainCallback.ActivityCallback.enterTimerScreen`), since the whole point is
+  jumping straight to the timer you searched for.
+- New `dest_timer_search` nav destination, `DRAWER_ID_TIMER_SEARCH` /
+  `DRAWER_ID_STEP_LOG` drawer entries in `MainActivity.kt`, both added to the
+  drawer's `LOCK_MODE_UNLOCKED` set and to `onDestinationChanged`'s
+  `refreshMainUi` dispatch — same treatment every other top-level drawer
+  destination already gets.
 
-**Status:** not started
+**Touches:** `TimerRepository.kt` (new interface method) · `Daos.kt` (new
+query) · `TimerRepositoryImpl.kt` · new `SearchTimers.kt` use case · new
+`presentation/.../timersearch/TimerSearchViewModel.kt` · new
+`app-timer-list/.../timersearch/` (`TimerSearchFragment.kt`,
+`TimerSearchAdapter.kt`, `VisibleTimerSearchResult.kt`) · new
+`fragment_timer_search.xml` + `item_timer_search_result.xml` · new strings
+(`main_action_timer_search`, `timer_search_hint`, `timer_search_empty`) · new
+`dest_timer_search` id (`app-base/res/values/ids.xml`) · `nav_graph.xml` (new
+destination) · `MainActivity.kt` (two new drawer entries, lock-mode set,
+`onDestinationChanged` dispatch) · `TimerFragment.kt` + `menu/timer.xml`
+(removed the now-relocated `action_step_log` entry — `action_record` is
+unaffected, Records stays in the overflow menu).
 
-**Manual test:** _(fill in after building)_
+**Tests:** `TimerRepositoryImplTest.searchTimerInfo_matchesNameAcrossFolders_excludingTrash`
+— matches across folders, verifies the trash exclusion, an instrumented
+androidTest following the existing repository-test pattern (no dedicated
+per-use-case tests exist anywhere in this codebase; use cases are thin
+wrappers, so repository-level coverage is the established convention).
+
+**Effort:** in line with the original 0.5–1 day estimate for the search
+query/backend; the drawer restructuring (moving Step Log, adding this as a
+sibling) was additional scope decided mid-build, not part of the original
+estimate.
+
+**Status:** done
+
+**Manual test:** built via `scripts/deploy.sh` / `scripts/clean-deploy.sh`
+(`personal` flavor). Confirmed the instrumented `TimerRepositoryImplTest`
+passes on both test phones (Android 16 SM-S901U1, Android 12 SM-G975U) after
+fixing a test bug (the test's own `otherFolderId` computation collided with
+`FolderEntity.FOLDER_TRASH`'s literal value, not a bug in the search query
+itself). Visually confirmed on the Android 16 phone: the drawer shows
+**Search Timers** and **Step Log** directly under **Timers**, Step Log no
+longer appears in the timer list's overflow menu, and the Search Timers
+screen renders correctly (search box, empty state). Full manual pass — every
+item in `timer-search-testing.md` — run and passed on the Android 12 phone
+only (a `clean-deploy.sh` wipe-and-reinstall): drawer entries present and
+correctly placed; global search returns matches across every folder, not
+just the current one; live-filtering by typed text works and clearing the
+box restores the full list; tapping a result opens that timer's running
+screen directly; a trashed timer stops appearing in results even when its
+name is searched exactly; both new screens show a back arrow (not the
+hamburger) and the drawer can still be swiped open from them, matching every
+other top-level drawer destination. Not separately re-run on the Android 16
+phone — user's call, accepted as sufficient.
 
 ## 8. Import a timer from a JSON file (including Google Drive)
 
