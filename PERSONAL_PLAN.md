@@ -24,6 +24,7 @@ use only (see licensing note at the bottom).
 - [ ] [15. Import/export compatibility across builds](#15-importexport-compatibility-across-builds-mainline--personal-fork)
 - [ ] [16. Gesture-based step advance (shake to advance)](#16-gesture-based-step-advance-shake-to-advance)
 - [ ] [17. Step log in backup/restore, with restore-safe stable ids](#17-step-log-in-backuprestore-with-restore-safe-stable-ids)
+- [ ] [18. Calendar-triggered timer start](#18-calendar-triggered-timer-start)
 
 Check a box and flip its section's `Status:` line to `done` in the same commit
 that merges the feature branch into `personal`.
@@ -1662,6 +1663,158 @@ dedup-on-restore logic) · `MachinePresenter.recordStepStamp` (generate the
 **Effort:** not estimated yet — mostly plumbing following the `timerStamps`
 precedent, plus the new dedup mechanism (genuinely new to this codebase,
 not a copy of an existing pattern).
+
+**Status:** not started
+
+**Manual test:** _(fill in after building)_
+
+## 18. Calendar-triggered timer start
+
+Branch: `feat/calendar-trigger`
+
+**What:** every 15 minutes, check the current/upcoming event on a chosen
+calendar; if its title matches a saved timer's name, post a notification
+that starts that timer with one tap — no need to open the app at all. The
+notification is ongoing (doesn't get swiped away or time out on its own)
+and fires with sound exactly 1 minute before the event starts, not at
+whatever moment the 15-minute poll happens to land on.
+
+**Design:**
+- **Calendar access: Android's on-device Calendar Provider
+  (`CalendarContract`), not the Google Calendar REST API.** Confirmed with
+  the user before building — the device already syncs Google Calendar
+  events into `CalendarContract` via the OS-level account sync the same way
+  the stock Calendar app reads them, so this needs only the `READ_CALENDAR`
+  runtime permission and zero network calls, at the cost of only seeing
+  calendars already synced to this device (not calendars in the account
+  that were never subscribed to locally). No Google Cloud project, no OAuth
+  consent flow, no token refresh, no API quota — the OAuth/API route was
+  considered and explicitly rejected as unnecessary complexity for a
+  personal-use app that already has calendar sync enabled.
+- **New `CalendarRepository` (domain interface + `data` impl)** —
+  `getCalendars(): List<CalendarInfo>` (queries `CalendarContract.Calendars`
+  for the picker) and `getUpcomingInstances(calendarId, fromMillis,
+  toMillis): List<CalendarEventInstance>` (queries
+  `CalendarContract.Instances`, which already expands recurring events into
+  individual occurrences within the window — no manual RRULE handling
+  needed).
+- **Matching: exact, case-insensitive, trimmed title-to-timer-name match —
+  not fuzzy.** Deliberately simple for v1: you name a calendar event to
+  match a timer's name on purpose, this isn't guessing intent from
+  free-form text the way item 10's playlist fuzzy-matching has to. Revisit
+  only if exact matching turns out to be annoying in practice (e.g. wanting
+  "Pushups (gym)" to still match "Pushups"). Loaded via the existing
+  `TimerRepository.items()`/timer-info list, compared client-side — cheap
+  at personal scale, no new query needed.
+- **Two-tier scheduling, split across the two mechanisms this codebase
+  already has for exactly this reason:**
+  1. A new `CalendarPollWorker` (`@HiltWorker CoroutineWorker`, matching
+     `component-tts`'s `TtsBakeryWorker` as the template for Hilt-injected
+     Worker wiring), registered as a `PeriodicWorkRequest` at WorkManager's
+     practical minimum interval — **15 minutes**, which happens to be
+     exactly what was asked for and isn't a coincidence: WorkManager
+     doesn't guarantee anything shorter. Each run queries the selected
+     calendar for instances starting in the next ~20 minutes (a window
+     wider than the poll gap, so an event starting between two polls is
+     never missed), matches titles against timer names, and for each new
+     match schedules step 2 below — "new" tracked by a small local record
+     (a `Set<String>` of already-scheduled instance ids in
+     `PreferenceData`, personal-scale-appropriate) so overlapping poll
+     windows don't double-schedule the same event.
+  2. For the actual "1 minute before" firing: reuse the **same
+     `android-job` mechanism `SchedulerJob`
+     (`data/.../job/SchedulerJob.kt`) already uses** for the Scheduler
+     feature's precise timing (`JobRequest.Builder(...).setExact(delay)`),
+     rather than inventing a second exact-timing mechanism or trying to
+     force WorkManager (which has no precise-timing guarantee) into this
+     role. `SCHEDULE_EXACT_ALARM`/`USE_EXACT_ALARM` are already declared in
+     the manifest for the Scheduler feature — this needs no new permission.
+     A new `CalendarAlertJob` mirrors `SchedulerJob`'s shape, scheduled for
+     `(event start − 1 minute)`, carrying the calendar instance id and
+     matched timer id as job extras.
+  3. **When the exact job actually fires, it re-queries that specific
+     calendar instance before posting anything** — the poll that scheduled
+     it could be up to ~15 minutes stale, and the event may have since been
+     moved, renamed off the match, or deleted. A stale alert for an event
+     that no longer matches is worse than a missed one. Also re-checks the
+     matched timer still exists (mirroring the same check `PhantomActivity`
+     already does before starting a timer, see below), skipping quietly if
+     not.
+- **Tapping the notification starts the timer with no new code for
+  "start a timer from outside the app" — that already exists.** Home-screen
+  shortcuts already do exactly this via `PhantomActivity`
+  (`app-timer-run/.../PhantomActivity.kt`): an intent with
+  `action = Constants.ACTION_START` and `EXTRA_TIMER_ID` set, handled by a
+  transparent, `exported`, `singleTask`, `Theme.NoDisplay` activity that
+  validates the timer still exists, calls
+  `MachineService.startTimingIntent(...)`, and immediately finishes with no
+  UI shown. The calendar alert's notification `contentIntent` is built the
+  exact same way `AppNavigatorImpl` builds a shortcut's intent today — no
+  new "start without opening the app" mechanism, just a new caller of the
+  existing one.
+- **Notification: a new `CHANNEL_CALENDAR_ALERT`**, modeled on
+  `AppInfoNotificationManager`
+  (`app-base/.../utils/AppInfoNotificationManager.kt`) rather than the
+  timer-run module's channels — `IMPORTANCE_DEFAULT`, default system sound
+  (unlike `CHANNEL_TIMING`'s deliberately silent ongoing notification, this
+  one is meant to be noticed). `setOngoing(true)` so it can't be swiped away
+  by accident, combined with `setAutoCancel(true)` so tapping it to start
+  the timer clears it — those two flags aren't mutually exclusive, ongoing
+  only blocks swipe-dismiss, not tap-dismiss. One notification id per
+  calendar instance id (not a single global slot), so two back-to-back
+  matched events can both be showing at once without clobbering each other.
+  If an alert is never tapped, the next poll cancels it once the event's
+  own end time has passed, so a missed alert doesn't linger forever.
+- **Settings:** a new "Calendar Alert" section — an enable switch (gated on
+  granting `READ_CALENDAR` first, requested via
+  `ActivityResultContracts.RequestPermission()` the same way
+  `SettingsFragment` already requests `READ_PHONE_STATE` for the
+  phone-call-pause behaviour) and a calendar picker. The picker can't be a
+  plain `ListPreference` (needs a static XML entry list; the calendar list
+  is per-device and per-account) — instead a small `CalendarPickerDialog`
+  modeled on `TimerPicker.kt`'s shape (a `DialogFragment` + small ViewModel
+  loading `CalendarRepository.getCalendars()` into a list), opened from a
+  `Preference.onPreferenceClick` rather than an inline `ListPreference`.
+  Both settings stored via a new `// region Calendar Alert` block in
+  `PreferenceData.kt` (`KEY_CALENDAR_ALERT_ENABLED`,
+  `KEY_CALENDAR_ALERT_CALENDAR_ID`), matching every other simple setting's
+  existing `Context` extension-property pattern — not the suspend
+  `PreferencesRepository`, which is for domain-layer use cases, not
+  UI-facing toggles like this one.
+- **Off by default, opt-in only** — `READ_CALENDAR` is a sensitive
+  permission or the feature would ever get enabled by default.
+
+**Open for revisit once this is actually being built:**
+- Exact-vs-fuzzy title matching (see above) — start exact, only add
+  normalization/fuzziness if it's genuinely annoying in practice.
+- Whether "1 minute before" should be user-configurable (a duration picker,
+  same shape as item 2's nag-interval field) instead of a hardcoded
+  constant — starting hardcoded since one value was asked for.
+- What happens to an already-posted alert if the matched timer gets
+  deleted or renamed *after* the notification is already showing (the pre-
+  post re-check above only covers up to the moment it's posted).
+
+**Touches:** new `CalendarRepository` (domain) + impl (`data`, wrapping
+`CalendarContract` queries) · new `CalendarPollWorker` (`@HiltWorker
+CoroutineWorker`, mirroring `TtsBakeryWorker`) + its `PeriodicWorkRequest`
+registration (likely `App.kt`, alongside wherever WorkManager's Hilt
+`Configuration.Provider` already lives, given the manifest already disables
+WorkManager's default initializer) · new `CalendarAlertJob` (mirroring
+`SchedulerJob.kt`) · `Constants.kt` (new `CHANNEL_CALENDAR_ALERT` +
+`NOTIF_ID_...`) · new small notification-building code modeled on
+`AppInfoNotificationManager.kt` · `PreferenceData.kt` (new region) ·
+`app-settings` (`pref_settings.xml` entries, new `CalendarPickerDialog` +
+small ViewModel, `SettingsFragment` permission-request wiring) ·
+`AndroidManifest.xml` (new `READ_CALENDAR` permission — the only new
+manifest permission needed; exact-alarm and notification permissions
+already exist for the Scheduler feature).
+
+**Effort:** not estimated yet — no single piece is large on its own (every
+mechanism involved already has a working precedent somewhere in this
+codebase to copy), but it's a genuinely new feature end to end with several
+moving parts wired together for the first time (WorkManager periodic work
+is new to this codebase; `CalendarContract` is new; a settings picker
+dialog outside `app-timer-list` is new).
 
 **Status:** not started
 
